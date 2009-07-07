@@ -56,10 +56,10 @@ mount_DATA += smb.mount smb-browse.mount
 libexec_PROGRAMS += gvfsd-smb-browse gvfsd-smb
 endif
 
-mount_in_files += google-documents.mount.in 
-if HAVE_GOOGLE_DOCUMENTS
-mount_DATA += google-documents.mount 
-libexec_PROGRAMS += gvfsd-google-documents
+mount_in_files += gdocs.mount.in 
+if HAVE_GDOCS
+mount_DATA += gdocs.mount 
+libexec_PROGRAMS += gvfsd-gdocs
 endif
 
 mount_in_files += cdda.mount.in
@@ -326,17 +326,19 @@ gvfsd_dnssd_CPPFLAGS = \
 
 gvfsd_dnssd_LDADD = $(libraries) $(AVAHI_LIBS) $(top_builddir)/common/libgvfscommon-dnssd.la
 
-gvfsd_google_documents_SOURCES = \
-	gvfsbackendgoogledocuments.c gvfsbackendgoogledocuments.h \
+gvfsd_gdocs_SOURCES = \
+	gvfsbackendgdocs.c gvfsbackendgdocs.h \
 	daemon-main.c daemon-main.h \
 	daemon-main-generic.c 
 
-gvfsd_google_documents_CPPFLAGS = \
-	-DBACKEND_HEADER=gvfsbackendgoogledocuments.h \
-	-DDEFAULT_BACKEND_TYPE=google_documents \
+gvfsd_gdocs_CPPFLAGS = \
+	-DBACKEND_HEADER=gvfsbackendgdocs.h \
+	-DDEFAULT_BACKEND_TYPE=gdocs \
 	-DMAX_JOB_THREADS=1 \
-	$(ARCHIVE_CFLAGS) \
-	-DBACKEND_TYPES='"google_documents", G_VFS_TYPE_BACKEND_GOOGLE_DOCUMENTS,'
+	$(GDOCS_CFLAGS) \
+	-DBACKEND_TYPES='"gdocs", G_VFS_TYPE_BACKEND_GDOCS'
+
+gvfsd_gdocs_LDADD = $(libraries) $(GDOCS_LIBS)
 
 gvfsd_archive_SOURCES = \
 	gvfsbackendarchive.c gvfsbackendarchive.h \

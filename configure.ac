@@ -138,6 +138,28 @@ AC_SUBST(HTTP_LIBS)
 AM_CONDITIONAL(HAVE_HTTP, [test "$msg_http" = "yes"])
 
 dnl **************************************************
+dnl *** Check if we should build with google doocuments backend ***
+dnl **************************************************
+AC_ARG_ENABLE(google_documents, [  --disable-google-documents           build without google documents backend])
+msg_google_documents=no
+GOOGLE_DOCUMENTS_CFLAGS=
+GOOGLE_DOCUMENTS_LIBS=
+
+if test "x$enable_google_documents" != "xno"; then
+  PKG_CHECK_EXISTS(libgdata >= 0.4, msg_google_documents=yes)
+
+  if test "x$msg_google_documents" = "xyes"; then
+    PKG_CHECK_MODULES(GOOGLE_DOCUMENTS, libsoup-gnome-2.4 libxml-2.0 libgdata)
+	AC_DEFINE(HAVE_GOOGLE_DOCUMENTS, 1, [Define to 1 if google documents is going to be built])
+  fi
+fi
+
+AC_SUBST(GOOGLE_DOCUMENTS_CFLAGS)
+AC_SUBST(GOOGLE_DOCUMENTS_LIBS)
+AM_CONDITIONAL(HAVE_GOOGLE_DOCUMENTS, [test "$msg_google_documents" = "yes"])
+
+
+dnl **************************************************
 dnl *** Check if we should build with DNS-SD backend ***
 dnl **************************************************
 AM_CONDITIONAL(HAVE_AVAHI, false)
@@ -691,6 +713,7 @@ echo "
         FTP/HTTP/WebDAV support       $msg_http
         ObexFTP support               $msg_obexftp
 	Samba support:	              $msg_samba
+	Google documents support	$msg_google_documents
 	FUSE support:                 $msg_fuse
         CDDA support:                 $msg_cdda
         Gphoto2 support:              $msg_gphoto2

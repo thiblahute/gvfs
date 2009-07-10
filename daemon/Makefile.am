@@ -336,7 +336,7 @@ gvfsd_gdocs_CPPFLAGS = \
 	-DDEFAULT_BACKEND_TYPE=gdocs \
 	-DMAX_JOB_THREADS=1 \
 	$(GDOCS_CFLAGS) \
-	-DBACKEND_TYPES='"gdocs", G_VFS_TYPE_BACKEND_GDOCS'
+	-DBACKEND_TYPES='"gdocs", G_VFS_TYPE_BACKEND_GDOCS,'
 
 gvfsd_gdocs_LDADD = $(libraries) $(GDOCS_LIBS)
 

@@ -58,7 +58,6 @@ struct _GVfsBackendGdocs
   GDataDocumentsService *service;
 };
 
-
 G_END_DECLS
 
 #endif /* __G_VFS_BACKEND_GDOCS_H__ */

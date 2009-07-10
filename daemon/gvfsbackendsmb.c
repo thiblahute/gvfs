@@ -1719,6 +1719,8 @@ do_enumerate (GVfsBackend *backend,
   smbc_stat_fn smbc_stat;
   smbc_closedir_fn smbc_closedir;
 
+  g_print ("Filename: %s", filename);
+
   uri = create_smb_uri_string (op_backend->server, op_backend->share, filename);
   
   smbc_opendir = smbc_getFunctionOpendir (op_backend->smb_context);
@@ -2085,6 +2087,13 @@ g_vfs_backend_smb_class_init (GVfsBackendSmbClass *klass)
   backend_class->query_info_on_read = do_query_info_on_read;
   backend_class->close_read = do_close_read;
   backend_class->create = do_create;
+static void
+do_enumerate (GVfsBackend *backend,
+              GVfsJobEnumerate *job,
+              const char *dirname,
+              GFileAttributeMatcher *matcher,
+              GFileQueryInfoFlags query_flags)
+{
   backend_class->append_to = do_append_to;
   backend_class->replace = do_replace;
   backend_class->write = do_write;

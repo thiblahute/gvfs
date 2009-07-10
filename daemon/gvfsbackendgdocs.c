@@ -234,7 +234,7 @@ do_mount (GVfsBackend *backend,
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 	else
 	{
-		g_print ("===Connected");
+		g_print ("===Connected\n");
 		g_vfs_job_succeeded (G_VFS_JOB (job));
 	}
 }
@@ -289,27 +289,29 @@ static void
 do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, GFileAttributeMatcher *matcher,
 		 	  GFileQueryInfoFlags query_flags)
 {
-	GDataDocumenService *service = G_VFS_BACKEND_GDOCS (backend)->service;
+	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
 	GDataDocumentsFeed *documents_feed;
 	GDataDocumentsQuery *query;
-	GError *error;
+	GError *error = NULL;
 	GList *i; /*GDataDocumentsEntry*/
-	GList *files; /*GFileInfo*/
+	GList *files = NULL; /*GFileInfo*/
 	GFileInfo *info;
+	guint j = 0;
 
 	query = gdata_documents_query_new (NULL);
 	if (strcmp (dirname, "/") != 0)
 	{
 		/*Gets the documents folder (the last of the dirname*/
-		gchar **folders_id_array, folder_id;
-		folders_id_array = g_strsplit (dirname, ,"/", 0);
+		gchar **folders_id_array, *folder_id;
+		folders_id_array = g_strsplit (dirname, "/", 0);
 		while (1)
 		{
-			g_free (folder_id);
 			folder_id = folders_id_array[j];
-			if (folders_id_array[j++] == NULL)
+			j++;
+			if (folders_id_array[j] == NULL)
 				break;
 		}
+		g_print ("FolderId: %s\n", folder_id);
 		/*Sets the folder id*/
 		gdata_documents_query_set_folder_id (query, folder_id);
 		g_free (folder_id);
@@ -317,34 +319,38 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 	}
 	gdata_documents_query_set_show_folders (query, TRUE);
 
-	documents_feed = gdata_documents_service_query_documents (service, query, G_VFS_JOB (job)->cancellable, NULL, NULL, &error);
+	documents_feed = gdata_documents_service_query_documents (service, query, NULL, NULL, NULL, &error);
+	
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		return;
 	}
 
-	for (i = gdata_feed_get_entries (documents_feed); i != NULL; i = i->new_path)
+	for (i = gdata_feed_get_entries (documents_feed); i != NULL; i = i->next)
 	{
-	    if (matcher == NULL || g_file_attribute_matcher_matches_only (matcher, G_FILE_ATTRIBUTE_STANDARD_NAME))
-		{
-			gchar *filename = gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (i->data));
-			gchar *file_display_name = gdata_entry_get_title (GDATA_ENTRY (i->data));
-			info = g_file_info_new ();
-			g_file_info_set_name (info, filename);
-			g_file_info_set_display_name (info, display_name);
-			files = g_list_prepend (files, info);
-		}
+		info = NULL;
+		gchar *filename = gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (i->data));
+		if (GDATA_IS_DOCUMENTS_FOLDER (i->data))
+			g_print ("Folder id: %s\n", filename);
+		gchar *file_display_name = gdata_entry_get_title (GDATA_ENTRY (i->data));
+		info = g_file_info_new ();
+		g_file_info_set_name (info, filename);
+		g_file_info_set_display_name (info, file_display_name);
+		files = g_list_prepend (files, info);
 	}
-    
 	if (files)
 	{
-	  files = g_list_reverse (files);
-	  g_vfs_job_enumerate_add_infos (job, files);
-	  g_list_foreach (files, (GFunc)g_object_unref, NULL);
-	  g_list_free (files);
+		g_print ("Files enumerated and added\n");
+		files = g_list_reverse (files);
+		g_vfs_job_enumerate_add_infos (job, files);
+		g_print ("Infos added\n");
+		g_list_foreach (files, (GFunc) g_object_unref, NULL);
+		g_list_free (files);
 	}
+	g_vfs_job_enumerate_done (job);
+	g_print ("Ended well...\n");
+
 }
 
 static void

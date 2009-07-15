@@ -68,7 +68,7 @@ G_DEFINE_TYPE (GVfsGDataFile, g_vfs_gdata_file, G_TYPE_OBJECT)
 gchar *
 g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path)
 {
-	gchar **entries_id_array, *entry_id;
+	gchar **entries_id_array, *entry_id=NULL;
 	gint i = 0;
 
 	g_return_val_if_fail (g_strcmp0 (path, "/") != 0, NULL);
@@ -240,7 +240,7 @@ g_vfs_gdata_file_new_from_gdata (GVfsBackendGdocs *backend, GDataEntry *gdata_en
 		gvfs_path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (gdata_entry));
 	else
 	{
-		g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, _("%s not found a document"), gdata_entry_get_title (gvfs_path));
+		g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, _("%s not found a document"), gdata_entry_get_title (gdata_entry));
 		return NULL;
 	}
 
@@ -336,7 +336,6 @@ g_vfs_gdata_file_new_parent_from_gvfs (GVfsBackendGdocs *backend, const gchar *g
 	g_object_unref (service);
 	g_object_unref (backend);
 	g_object_unref (entry_list->data);
-	g_free (gvfs_path);
 	g_list_free (entry_list);
 	if (!g_vfs_gdata_file_is_folder (parent_folder))
 	{
@@ -412,7 +411,10 @@ g_vfs_gdata_file_equal (const GVfsGDataFile *a, const GVfsGDataFile *b)
 	g_return_val_if_fail (G_VFS_IS_GDATA_FILE (a), FALSE);
 	g_return_val_if_fail (G_VFS_IS_GDATA_FILE (b) != NULL, FALSE);
 
-	return g_str_equal (a->priv->gvfs_path, b->priv->gvfs_path);
+	if (g_strcmp0 (a->priv->gvfs_path, b->priv->gvfs_path) == 0)
+		return TRUE;
+	else
+		return FALSE;
 }
 
 /**

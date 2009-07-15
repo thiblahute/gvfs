@@ -19,8 +19,8 @@
  * Author: Thibault Saunier <saunierthibault@gmail.com>
  */
 
-#ifndef __G_VFS_GDOCS_FILE_H__
-#define __G_VFS_GDOCS_FILE_H__
+#ifndef __G_VFS_GDATA_FILE_H__
+#define __G_VFS_GDATA_FILE_H__
 
 #include <glib.h>
 #include <glib-object.h>
@@ -65,4 +65,4 @@ gboolean g_vfs_gdata_file_is_folder (const GVfsGDataFile *file);
 
 G_END_DECLS
 
-#endif /* __G_VFS_GDOCS_FILE_H__ */
+#endif /* __G_VFS_GDATA_FILE_H__ */

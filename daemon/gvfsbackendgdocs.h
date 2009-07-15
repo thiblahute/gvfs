@@ -1,6 +1,6 @@
 /* GIO - GLib Input, Output and Streaming Library
  * 
- * Copyright (C) 2008 Red Hat, Inc.
+ * Copyright (C) Thibault Saunier 2009 <saunierthibault@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public

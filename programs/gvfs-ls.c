@@ -89,7 +89,10 @@ show_info (GFileInfo *info)
   
   name = g_file_info_get_name (info);
   if (name == NULL)
+  {
+	g_print ("Name NULL\n");
     name = "";
+  }
 
   size = g_file_info_get_size (info);
   type = type_to_string (g_file_info_get_file_type (info));
@@ -139,11 +142,15 @@ list (GFile *file)
     return;
 
   error = NULL;
+  g_print ("Ligne 142\n");
+  attributes = g_strdup ("G_FILE_ATTRIBUTE_STANDARD_NAME");
+
   enumerator = g_file_enumerate_children (file,
                                           attributes, 
                                           nofollow_symlinks ? G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS : 0,
                                           NULL,
                                           &error);
+  g_print ("Ligne 148\n");
   if (enumerator == NULL)
     {
       g_printerr ("Error: %s\n", error->message);
@@ -296,6 +303,7 @@ print_completions (const char *arg)
   if (unescaped == NULL)
     unescaped = g_strdup (arg);
   
+  g_print ("PRINT ??\n");
   if (*unescaped == '~')
     {
       t = unescaped;
@@ -412,6 +420,7 @@ main (int argc, char *argv[])
 
   if (show_completions != NULL)
     {
+	
       print_completions (show_completions);
       return 0;
     }
@@ -423,6 +432,7 @@ main (int argc, char *argv[])
       for (i = 1; i < argc; i++) {
 	file = g_file_new_for_commandline_arg (argv[i]);
 	list (file);
+	g_print ("ARGC> Listed ??\n");
 	g_object_unref (file);
       }
     }
@@ -433,6 +443,7 @@ main (int argc, char *argv[])
       cwd = g_get_current_dir ();
       file = g_file_new_for_path (cwd);
       g_free (cwd);
+	g_print ("ARGC<<<< Listed ??\n");
       list (file);
       g_object_unref (file);
     }

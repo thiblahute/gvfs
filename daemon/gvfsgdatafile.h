@@ -62,6 +62,7 @@ const gchar *g_vfs_gdata_file_get_gvfs_path (const GVfsGDataFile *file);
 GVfsBackendGdocs *g_vfs_gdata_file_get_backend (const GVfsGDataFile *file);
 gboolean g_vfs_gdata_file_equal (const GVfsGDataFile *a, const GVfsGDataFile *b);
 gboolean g_vfs_gdata_file_is_folder (const GVfsGDataFile *file);
+GFileInfo *g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeMatcher *matcher, GError **error);
 
 G_END_DECLS
 

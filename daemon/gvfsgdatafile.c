@@ -68,7 +68,7 @@ G_DEFINE_TYPE (GVfsGDataFile, g_vfs_gdata_file, G_TYPE_OBJECT)
 gchar *
 g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path)
 {
-	gchar **entries_id_array, *entry_id=NULL;
+	gchar **entries_id_array, *entry_id = NULL;
 	gint i = 0;
 
 	g_return_val_if_fail (g_strcmp0 (path, "/") != 0, NULL);
@@ -168,13 +168,15 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 	GVfsGDataFile *file;
 	GDataDocumentsQuery *entry_query;
 	GDataDocumentsFeed *tmp_feed;
-	GList *entry_list=NULL;
-	gchar *entry_id=NULL;
+	GDataDocumentsEntry *entry=NULL;
+	GList *entries_list = NULL, *i;
+	gchar *entry_id = NULL;
 	GDataDocumentsService *service = g_object_ref (G_VFS_BACKEND_GDOCS (backend)->service);
 
 	g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
 	g_return_val_if_fail (gvfs_path != NULL, NULL);
 	
+	error = NULL;
 	entry_id = g_vfs_gdata_file_get_document_id_from_gvfs (gvfs_path);
 	if (entry_id == NULL)
 	{
@@ -183,35 +185,52 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 							 NULL);
 	}
 
-	entry_query = gdata_documents_query_new (NULL);
+	/*entry_query = gdata_documents_query_new (NULL);
 	gdata_query_set_entry_id (GDATA_QUERY (entry_query), entry_id);
-	g_free (entry_id);
+	g_free (entry_id);*/
 
 	/*Get the entry (as feed) on the server*/
+	entry_query = gdata_documents_query_new (NULL);
+	gdata_documents_query_set_show_folders (GDATA_QUERY (entry_query), TRUE);
 	tmp_feed = gdata_documents_service_query_documents (service, entry_query, cancellable, NULL, NULL, error);
 	g_object_unref (entry_query);
 	
 	if (error != NULL)
 	{
+		g_print ("Error getting the feed");
 		if (tmp_feed != NULL)
 			g_object_unref (tmp_feed);
 		return NULL;
 	}
 
-	entry_list = gdata_feed_get_entries (GDATA_FEED (tmp_feed));
-	if (entry_list == NULL)
+	entries_list = gdata_feed_get_entries (GDATA_FEED (tmp_feed));
+	for (i = entries_list; i != NULL; i=i->next)
 	{
-		g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, _("%s not found"), gvfs_path);
+		if (g_strcmp0 (gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (i->data)), entry_id) == 0)
+		{
+			g_print ("\nDOcuments name: %s\n", gdata_entry_get_title (GDATA_ENTRY (i->data)));
+			entry = g_object_ref (GDATA_DOCUMENTS_ENTRY (i->data));
+		}
+	}
+	if (entry == NULL)
+	{
+		g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, _("%s not found a document"), gvfs_path);
+
+		g_print ("Error adress: %p\n", error);
+
 		if (tmp_feed != NULL)
 			g_object_unref (tmp_feed);
+
 		return NULL;
 	}
 
-	file = g_object_new (G_VFS_TYPE_GDATA_FILE, "backend", backend, "gdata-entry", GDATA_ENTRY (entry_list->data), "gvfs-path", gvfs_path, NULL);
+	file = g_object_new (G_VFS_TYPE_GDATA_FILE, "backend", backend, "gdata-entry", GDATA_ENTRY (entry), "gvfs-path", gvfs_path, NULL);
+
+	g_print ("Gvfs path: %s\n", g_vfs_gdata_file_get_gvfs_path (file));
 
 	g_object_unref (tmp_feed);
 	g_object_unref (service);
-	g_list_free (entry_list);
+	g_list_free (entries_list);
 
 	return file;	
 }
@@ -233,7 +252,7 @@ g_vfs_gdata_file_new_from_gdata (GVfsBackendGdocs *backend, GDataEntry *gdata_en
 	gchar *gvfs_path;
 
 	g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
-	g_return_val_if_fail (!GDATA_IS_ENTRY (gdata_entry), NULL);
+	g_return_val_if_fail (GDATA_IS_ENTRY (gdata_entry), NULL);
 
 	/*TODO handle picass albums*/
 	if (GDATA_IS_DOCUMENTS_ENTRY (gdata_entry))
@@ -382,6 +401,7 @@ g_vfs_gdata_file_get_gdata_entry (const GVfsGDataFile *file)
 /**
  * g_vfs_gdata_file_get_gvfs_path:
  * @file: a file
+ * @info: a GFileInfo, if it's not %NULL, an error will be return
  *
  * Gets the GVfs path used to refer to @file.
  *
@@ -392,9 +412,110 @@ g_vfs_gdata_file_get_gvfs_path (const GVfsGDataFile *file)
 {
   g_return_val_if_fail (G_VFS_IS_GDATA_FILE (file), NULL);
 
-  return file->priv->gvfs_path;
-}
+  return file->priv->gvfs_path; }
 
+GFileInfo *
+g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeMatcher *matcher, GError **error)
+{
+	GFileType file_type;
+	GTimeVal t;
+	GIcon *icon;
+	gchar *content_type, *display_name, *filename;
+
+	info = g_file_info_new();
+	if (file->priv->gdata_entry != NULL || g_strcmp0 (file->priv->gvfs_path, "/") == 0)
+	{
+		if (GDATA_IS_DOCUMENTS_ENTRY (file->priv->gdata_entry))
+		{
+			filename = gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (file->priv->gdata_entry));
+			gdata_documents_entry_get_edited (GDATA_DOCUMENTS_ENTRY (file->priv->gdata_entry), &t);
+			g_print ("ID: %s \n", gdata_entry_get_id(GDATA_ENTRY (file->priv->gdata_entry)));
+			g_file_info_set_name (info, filename);
+			//g_print ("Filename: %s ", filename);
+			if (*filename == '.')
+				g_file_info_set_is_hidden (info, TRUE);
+			g_file_info_set_modification_time (info, &t);
+		}
+		else if (!g_vfs_gdata_file_is_root (file))
+		{
+			g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, _("%s not supported"), file->priv->gvfs_path);
+			return NULL;
+		}
+
+		display_name = g_filename_display_name (gdata_entry_get_title (file->priv->gdata_entry));
+		g_print ("DisplayName: %s\n", display_name);
+		if (g_strstr_len (display_name, strlen (display_name), "\357\277\275") != NULL)
+		{
+			gchar *p = display_name;
+			display_name = g_strconcat (display_name, _(" (invalid encoding)"), NULL);
+			g_free (p);
+		}
+		g_file_info_set_display_name (info, display_name);
+
+		file_type = G_FILE_TYPE_UNKNOWN;
+		if (g_vfs_gdata_file_is_folder (file))
+			file_type = G_FILE_TYPE_DIRECTORY;
+		else 
+			file_type = G_FILE_TYPE_DIRECTORY;
+		g_file_info_set_file_type (info, file_type);
+		g_file_info_set_size (info, 1000);
+
+		if (g_file_attribute_matcher_matches (matcher,
+					G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE) ||
+				g_file_attribute_matcher_matches (matcher,
+					G_FILE_ATTRIBUTE_STANDARD_ICON))
+		{
+			icon = NULL;
+			content_type = NULL;
+
+			if (g_vfs_gdata_file_is_folder (file))
+			{
+				content_type = g_strdup ("inode/directory");
+				if (g_strcmp0 (file->priv->gvfs_path, "/") == 0)
+					icon = g_themed_icon_new ("folder-remote");
+				else
+					icon = g_themed_icon_new ("folder");
+			}
+			else 
+			{ /*Create the content type*/
+				if (GDATA_IS_DOCUMENTS_SPREADSHEET (file->priv->gdata_entry))
+					content_type = g_strdup ("application/x-vnd.oasis.opendocument.spreadsheet");
+				else if (GDATA_IS_DOCUMENTS_TEXT (file->priv->gdata_entry))
+					content_type = g_strdup ("application/vnd.oasis.opendocument.text");
+				else if (GDATA_IS_DOCUMENTS_PRESENTATION (file->priv->gdata_entry))
+					content_type = g_strdup ("application/vnd.ms-powerpoint");
+				else if (GDATA_IS_DOCUMENTS_TEXT (file->priv->gdata_entry))
+					content_type = g_strdup ("application/x-vnd.oasis.opendocument.spreadsheet");
+				else 
+					content_type = g_content_type_guess (display_name, NULL, 0, NULL);
+				if (content_type)
+					icon = g_content_type_get_icon (content_type);
+			}
+
+			if (content_type)
+			{
+				g_file_info_set_content_type (info, content_type);
+				g_free (content_type);
+			}
+
+			if (icon == NULL)
+				icon = g_themed_icon_new ("text-x-generic");
+
+			g_file_info_set_icon (info, icon);
+			g_object_unref (icon);
+		}
+
+		g_free (display_name);
+
+		if (g_file_attribute_matcher_matches (matcher, G_FILE_ATTRIBUTE_ETAG_VALUE))
+		{
+			const gchar *etag = gdata_entry_get_etag (file->priv->gdata_entry);
+			g_file_info_set_attribute_string (info, G_FILE_ATTRIBUTE_ETAG_VALUE, etag);
+		}
+	}
+	
+	return info;
+}
 /**
  * g_vfs_gdata_file_equal:
  * @a: a #GVfsGDataFile
@@ -409,7 +530,7 @@ gboolean
 g_vfs_gdata_file_equal (const GVfsGDataFile *a, const GVfsGDataFile *b)
 {
 	g_return_val_if_fail (G_VFS_IS_GDATA_FILE (a), FALSE);
-	g_return_val_if_fail (G_VFS_IS_GDATA_FILE (b) != NULL, FALSE);
+	g_return_val_if_fail (G_VFS_IS_GDATA_FILE (b), FALSE);
 
 	if (g_strcmp0 (a->priv->gvfs_path, b->priv->gvfs_path) == 0)
 		return TRUE;
@@ -493,6 +614,8 @@ g_vfs_gdata_file_class_init (GVfsGDataFileClass *klass)
 {
 	GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 
+	g_type_class_add_private (klass, sizeof (GVfsGDataFile));
+
 	gobject_class->get_property = g_vfs_gdata_file_get_property;
 	gobject_class->set_property = g_vfs_gdata_file_set_property;
 	gobject_class->dispose = g_vfs_gdata_file_dispose;
@@ -507,7 +630,7 @@ g_vfs_gdata_file_class_init (GVfsGDataFileClass *klass)
 									 g_param_spec_object ("backend",
 														  "backend", "The backend related to this #GVfsGDataFile",
 														  G_VFS_TYPE_BACKEND,
-														  G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+														  G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 	/*
 	 * GVfsGDataFile:gdata-entry
 	 *
@@ -517,7 +640,7 @@ g_vfs_gdata_file_class_init (GVfsGDataFileClass *klass)
 									 g_param_spec_object ("gdata-entry",
 														  "gdata-entry", "The #GDataEntry corresponding", 
 														  GDATA_TYPE_ENTRY,
-														  G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+														  G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 	/**
 	 * GDataGDEmailAddress:label:
 	 *
@@ -525,9 +648,9 @@ g_vfs_gdata_file_class_init (GVfsGDataFileClass *klass)
 	 **/
 	g_object_class_install_property (gobject_class, PROP_GVFS_PATH,
 				g_param_spec_string ("gvfs-path",
-					"Gvfs path", "A simple string corresponding to the gvfs path of the class.",
-					"/",
-					G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+									 "Gvfs path", "A simple string corresponding to the gvfs path of the class.",
+				 					 "/",
+									 G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
 }
 

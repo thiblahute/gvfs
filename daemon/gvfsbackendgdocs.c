@@ -121,8 +121,6 @@ do_mount (GVfsBackend *backend,
 	username = g_strdup (g_mount_spec_get (mount_spec, "user"));
 	dummy_host = g_strdup (g_mount_spec_get (mount_spec, "host"));
 
-	g_print ("Dumme host %s\n", dummy_host);
-	
 
 	/*Set the password asking flags.*/
 	if (!username)
@@ -281,16 +279,26 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 {
 	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
 	GVfsGDataFile *source_gdata_file, *destination_folder;
-	GDataDocumentsEntry *destination_entry;
-	GError *error=NULL;
+	GDataDocumentsEntry *new_entry;
+	GError *error = NULL;
 	GCancellable *cancellable;
 
+	if (flags & G_FILE_COPY_BACKUP)
+    {
+      /* FIXME: implement? */
+      g_vfs_job_failed (G_VFS_JOB (job),
+                           G_IO_ERROR,
+                           G_IO_ERROR_CANT_CREATE_BACKUP,
+                           _("backups not supported yet"));
+      return;
+    }
 	cancellable = G_VFS_JOB (job)->cancellable;
 
-	source_gdata_file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), source, cancellable, &error);
+	source_gdata_file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), source, NULL, NULL);
 
 	if (error != NULL)
 	{
+		g_print ("Error making GVfsGDataFile\n");
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
 		if (source_gdata_file != NULL)
@@ -312,10 +320,10 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 		}
 
 		/*Move the document on the server*/
-		destination_entry = gdata_documents_service_move_document_to_folder (service,
-																			 GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_gdata_file)),
-																			 GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (destination_folder)),
-																			 cancellable, &error);
+		new_entry = gdata_documents_service_move_document_to_folder (service,
+																	 GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_gdata_file)),
+																	 GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (destination_folder)),
+																	 cancellable, &error);
 		if (error != NULL)
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -324,7 +332,7 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 			g_object_unref (destination_folder);
 			return;
 		}
-		if (!GDATA_IS_DOCUMENTS_ENTRY (destination_entry))
+		if (!GDATA_IS_DOCUMENTS_ENTRY (new_entry))
 		{
 			g_vfs_job_failed (G_VFS_JOB (job),
 					G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
@@ -348,10 +356,10 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 			g_object_unref (destination_folder);
 			return;
 		}
-		gdata_documents_service_remove_document_from_folder (service, 
+		new_entry = gdata_documents_service_remove_document_from_folder (service, 
 															 GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_gdata_file)), 
 															 GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (destination_folder)),
-														     TRUE, cancellable, &error);
+														     cancellable, &error);
 		if (error != NULL)
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -378,7 +386,6 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 	GError *error = NULL;
 	GList *i; /*GDataDocumentsEntry*/
 	GFileInfo *info;
-	guint j = 0;
 
 	query = gdata_documents_query_new (NULL);
 	if (strcmp (dirname, "/") != 0)
@@ -406,28 +413,30 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 		gchar *path, **strv_path;
 
 		path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (i->data));
-		strv_path = g_strsplit (strv_path, "/", 3);
+		strv_path = g_strsplit (path, "/", 3);
 
-		g_print ("Path: %s, length %d\n", path, g_strv_length (strv_path));
-		
-		/*We check if the file is in the selected folder or in another one*/
-		if (g_strv_length (strv_path) < 2)
+		/*We check if the file is in the selected folder or in the root one*/
+		if (g_strv_length (strv_path) < 4 || g_strcmp0 (path, "/") == 0)
 		{
-			const gchar *filename = gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (i->data));
-			const gchar *file_display_name = gdata_entry_get_title (GDATA_ENTRY (i->data));
+			GVfsGDataFile *file = g_vfs_gdata_file_new_from_gdata (backend, GDATA_ENTRY (i->data), &error);
 
-			if (strpbrk (file_display_name, "/\r\n"))
+			if (g_vfs_gdata_file_is_folder (file))
+				g_print ("FOLDER ID: ==%s== ", gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (file))));
+
+			if (error != NULL)
 			{
-				/*TODO*/
+				g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+				g_error_free (error);
+				return;
 			}
 
-			g_print ("file name: %s\n", filename);
-			g_print ("file display name: %s\n", file_display_name);
-
-			info = g_file_info_new ();
-			g_file_info_set_name (info, filename);
-			g_file_info_set_display_name (info, file_display_name);
-
+			info = g_vfs_gdata_file_get_info (file, info, matcher, error);
+			if (error != NULL)
+			{
+				g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+				g_error_free (error);
+				return;
+			}
 			g_vfs_job_enumerate_add_info (job, info);
 		}
 		g_free (path);
@@ -438,6 +447,237 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
+static void
+do_make_directory (GVfsBackend *backend,
+                   GVfsJobMakeDirectory *job,
+                   const char *filename)
+{
+	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
+	GDataDocumentsFolder *folder, *new_folder;
+	GError *error = NULL;
+	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
+	GDataCategory *folder_category;
+	gchar *title = g_vfs_gdata_file_get_document_id_from_gvfs (filename);
+
+	folder = gdata_documents_folder_new (NULL);
+	folder_category = gdata_category_new ("http://schemas.google.com/docs/2007#folder", "http://schemas.google.com/g/2005#kind", "folder");
+	gdata_entry_set_title (GDATA_ENTRY (folder), title);
+	gdata_entry_add_category (GDATA_ENTRY (folder), folder_category);
+	g_free (title);
+
+	new_folder = GDATA_DOCUMENTS_FOLDER (gdata_documents_service_upload_document (service, folder, NULL, NULL, cancellable, &error));
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		return;
+	}
+
+    g_vfs_job_succeeded (G_VFS_JOB (job));
+}
+
+static void 
+do_open_for_read (GVfsBackend *backend,
+		  GVfsJobOpenForRead *job,
+		  const char *filename)
+{
+	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
+	GError *error = NULL;
+
+	GVfsGDataFile *file = g_vfs_gdata_file_new_from_gvfs (backend, filename, cancellable, &error);
+
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		return;
+	}
+
+	if (g_vfs_gdata_file_is_folder (file))
+	{
+        g_vfs_job_failed (G_VFS_JOB (job),
+                          G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY,
+                          _("Can't open directory"));
+		return;
+	}
+}
+
+static void
+do_delete (GVfsBackend *backend,
+	   GVfsJobDelete *job,
+	   const char *filename)
+{
+	GError *error=NULL;
+	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
+	GDataService *service = G_VFS_BACKEND_GDOCS (backend)->service;
+
+	g_print ("BAckend Error adress: %p\n", error);
+	g_print ("BAckend &Error adress: %p\n", &error);
+	GVfsGDataFile *file = g_vfs_gdata_file_new_from_gvfs (backend, filename, cancellable, &error);
+
+	/*TODO use the error as test*/
+	if (file == NULL)
+	{
+		g_print ("BAckend Error adress: %p\n", error);
+		g_print ("BAckend &Error adress: %p\n", &error);
+		g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+								  _("%s not found"), filename);
+		return;
+	}
+	gdata_service_delete_entry (service,
+								GDATA_ENTRY (g_vfs_gdata_file_get_gdata_entry (file)),
+								cancellable, &error);
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		return;
+	}
+	g_print ("%s :deleted\n", gdata_entry_get_title (g_vfs_gdata_file_get_gdata_entry (file)));
+
+	g_vfs_job_succeeded (G_VFS_JOB (job));
+}
+
+static void
+do_query_info_on_write (GVfsBackend *backend,
+			GVfsJobQueryInfoWrite *job,
+			GVfsBackendHandle _handle,
+			GFileInfo *info,
+			GFileAttributeMatcher *matcher)
+{
+	GError *error = NULL;
+
+	GVfsGDataFile *file = g_vfs_gdata_file_new_from_gdata (backend, G_VFS_GDATA_FILE  (_handle), &error);
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), &error);
+		g_error_free (error);
+		if (file != NULL)
+			g_object_unref (file);
+		return;
+	}
+
+	g_vfs_gdata_file_get_info (file, info, matcher, &error);
+
+	if (error == NULL)
+	{
+		g_vfs_job_succeeded (G_VFS_JOB (job));
+		g_object_unref (file);
+	else
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), &error);
+		g_error_free (error);
+		if (file != NULL)
+			g_object_unref (file);
+	}
+}
+
+static void
+do_replace (GVfsBackend *backend,
+	    GVfsJobOpenForWrite *job,
+	    const char *filename,
+	    const char *etag,
+	    gboolean make_backup,
+	    GFileCreateFlags flags)
+{
+	GVfsGDataFile *file;
+
+	if (make_backup)
+	{
+		/* FIXME: implement! */
+		g_set_error_literal (&task.error,
+				G_IO_ERROR,
+				G_IO_ERROR_CANT_CREATE_BACKUP,
+				_("backups not supported yet"));
+		g_vfs_ftp_task_done (&task);
+		return;
+	}
+
+	file = g_vfs_ftp_file_new_from_gvfs (backend, filename);
+	if (g_strcmp0 (etag, gdata_entry_get_etag (g_vfs_gdata_file_get_gdata_entry (file))) != 0)
+	{
+		g_free (current_etag);
+		g_set_error_literal (&error,
+				G_IO_ERROR,
+				G_IO_ERROR_WRONG_ETAG,
+				_("The file was externally modified"));
+	}
+
+		g_vfs_ftp_dir_cache_purge_file (ftp->dir_cache, file);
+		g_vfs_ftp_file_free (file);
+
+		g_vfs_ftp_task_done (&task);
+}
+
+
+static void
+do_write (GVfsBackend *backend,
+	  GVfsJobWrite *job,
+	  GVfsBackendHandle _handle,
+	  char *buffer,
+	  gsize buffer_size)
+{
+  GVfsBackendSmb *op_backend = G_VFS_BACKEND_SMB (backend);
+  SmbWriteHandle *handle = _handle;
+  ssize_t res;
+  smbc_write_fn smbc_write;
+
+  smbc_write = smbc_getFunctionWrite (op_backend->smb_context);
+  res = smbc_write (op_backend->smb_context, handle->file,
+					buffer, buffer_size);
+  if (res == -1)
+    g_vfs_job_failed_from_errno (G_VFS_JOB (job), errno);
+  else
+    {
+      g_vfs_job_write_set_written_size (job, res);
+      g_vfs_job_succeeded (G_VFS_JOB (job));
+    }
+}
+
+static void
+do_seek_on_write (GVfsBackend *backend,
+		  GVfsJobSeekWrite *job,
+		  GVfsBackendHandle _handle,
+		  goffset    offset,
+		  GSeekType  type)
+{
+  GVfsBackendSmb *op_backend = G_VFS_BACKEND_SMB (backend);
+  SmbWriteHandle *handle = _handle;
+  int whence;
+  off_t res;
+  smbc_lseek_fn smbc_lseek;
+
+  switch (type)
+    {
+    case G_SEEK_SET:
+      whence = SEEK_SET;
+      break;
+    case G_SEEK_CUR:
+      whence = SEEK_CUR;
+      break;
+    case G_SEEK_END:
+      whence = SEEK_END;
+      break;
+    default:
+      g_vfs_job_failed (G_VFS_JOB (job),
+			G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+			_("Unsupported seek type"));
+      return;
+    }
+
+  smbc_lseek = smbc_getFunctionLseek (op_backend->smb_context);
+  res = smbc_lseek (op_backend->smb_context, handle->file, offset, whence);
+
+  if (res == (off_t)-1)
+    g_vfs_job_failed_from_errno (G_VFS_JOB (job), errno);
+  else
+    {
+      g_vfs_job_seek_write_set_offset (job, res);
+      g_vfs_job_succeeded (G_VFS_JOB (job));
+    }
+
+  return;
+}
 static void
 g_vfs_backend_gdocs_class_init (GVfsBackendGdocsClass *klass)
 {
@@ -450,14 +690,11 @@ g_vfs_backend_gdocs_class_init (GVfsBackendGdocsClass *klass)
 	backend_class = G_VFS_BACKEND_CLASS (klass); 
 
 	backend_class->mount = do_mount;
-	/*backend_class->open_for_read = do_open_for_read;*/
+	backend_class->open_for_read = do_open_for_read;
+	backend_class->make_directory = do_make_directory;
 	backend_class->enumerate = do_enumerate;
 	backend_class->move = do_move;
 	backend_class->unmount = do_unmount;
-	/*  backend_class->try_open_for_read = try_open_for_read;
-		backend_class->try_read          = try_read;
-		backend_class->try_seek_on_read  = try_seek_on_read;
-		backend_class->try_close_read    = try_close_read;
-		backend_class->try_query_info    = try_query_info;
-	*/
+	backend_class->delete = do_delete;
+	backend_class->replace = do_replace;
 }

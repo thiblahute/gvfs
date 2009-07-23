@@ -94,12 +94,12 @@ g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path)
  * Returns: the parent entry ID.
  * */
 gchar *
-g_vfs_gdata_get_parent_id_from_gvfs (const gchar *path)
+g_vfs_gdata_file_get_parent_id_from_gvfs (const gchar *path)
 {
 	gchar **entries_id_array, *entry_id;
 	gint i = 0;
 	
-	g_return_val_if_fail (strcmp (path, "/") != 0, NULL);
+	g_return_val_if_fail (strcmp (path, "/") != 0, "/");
 	entries_id_array = g_strsplit (path, "/", 0);
 	/*We get the before last entry ID*/
 	while (1)
@@ -176,7 +176,6 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 	g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
 	g_return_val_if_fail (gvfs_path != NULL, NULL);
 	
-	error = NULL;
 	entry_id = g_vfs_gdata_file_get_document_id_from_gvfs (gvfs_path);
 	if (entry_id == NULL)
 	{
@@ -191,11 +190,11 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 
 	/*Get the entry (as feed) on the server*/
 	entry_query = gdata_documents_query_new (NULL);
-	gdata_documents_query_set_show_folders (GDATA_QUERY (entry_query), TRUE);
+	gdata_documents_query_set_show_folders (entry_query, TRUE);
 	tmp_feed = gdata_documents_service_query_documents (service, entry_query, cancellable, NULL, NULL, error);
 	g_object_unref (entry_query);
 	
-	if (error != NULL)
+	if (*error != NULL)
 	{
 		g_print ("Error getting the feed");
 		if (tmp_feed != NULL)
@@ -312,9 +311,9 @@ g_vfs_gdata_file_new_parent_from_gvfs (GVfsBackendGdocs *backend, const gchar *g
 	g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
 	g_return_val_if_fail (gvfs_path != NULL, NULL);
 
-	parent_entry_id = g_vfs_gdata_get_parent_id_from_gvfs (gvfs_path);
+	parent_entry_id = g_vfs_gdata_file_get_parent_id_from_gvfs (gvfs_path);
 
-	if (parent_entry_id == NULL)
+	if (g_strcmp0 (parent_entry_id , "/") == 0)
 	{
 		return g_object_new (G_VFS_TYPE_GDATA_FILE,
 							 "backend", backend,
@@ -330,7 +329,7 @@ g_vfs_gdata_file_new_parent_from_gvfs (GVfsBackendGdocs *backend, const gchar *g
 	tmp_feed = gdata_documents_service_query_documents (service, entry_query, cancellable, NULL, NULL, error);
 	g_object_unref (entry_query);
 	
-	if (error != NULL)
+	if (*error != NULL)
 	{
 		if (tmp_feed != NULL)
 			g_object_unref (tmp_feed);
@@ -412,7 +411,8 @@ g_vfs_gdata_file_get_gvfs_path (const GVfsGDataFile *file)
 {
   g_return_val_if_fail (G_VFS_IS_GDATA_FILE (file), NULL);
 
-  return file->priv->gvfs_path; }
+  return file->priv->gvfs_path; 
+}
 
 GFileInfo *
 g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeMatcher *matcher, GError **error)
@@ -420,7 +420,8 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 	GFileType file_type;
 	GTimeVal t;
 	GIcon *icon;
-	gchar *content_type, *display_name, *filename;
+	gchar *content_type, *display_name;
+	const gchar *filename;
 
 	info = g_file_info_new();
 	if (file->priv->gdata_entry != NULL || g_strcmp0 (file->priv->gvfs_path, "/") == 0)
@@ -555,6 +556,138 @@ g_vfs_gdata_file_is_folder (const GVfsGDataFile *file)
 		return TRUE;
 	else
 		return FALSE;
+}
+
+/* g_vfs_gdata_file_download_file 
+ *
+ * @file: a GVfsGDataFile file
+ * @content_type: return location for the document's content type, or NULL; free with g_free() 
+ * @export_format: the format in which the presentation should be exported
+ * @destination_directory :	the directory into which the presentation file should be saved
+ * @replace_file_if_exists : %TRUE if the file should be replaced if it already exists, %FALSE otherwise
+ * @download_folders: %TRUE if you want to download all the directory three, otherwise %FALSE
+ * @cancellable: optional GCancellable object, or NULL
+ * @error :	a GError, or NULL
+ */
+GFile *
+g_vfs_gdata_file_download_file (GVfsGDataFile *file, gchar **content_type, gchar *local_path,
+								gboolean replace_file_if_exists, gboolean download_folders, GCancellable *cancellable, 
+								GError **error)
+{
+	GDataDocumentsFeed *tmp_feed = NULL;
+	GDataDocumentsEntry *entry; 
+	GDataDocumentsService *service;
+	GFile *new_file;
+		
+	g_return_val_if_fail (!G_VFS_IS_GDATA_FILE (file), NULL);
+	g_return_val_if_fail (local_path != NULL, NULL);
+
+	entry = GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (file));
+	service = g_object_ref (G_VFS_BACKEND_GDOCS (file->priv->backend)->service);
+	if (g_vfs_gdata_file_is_folder (file))
+	{
+		if (download_folders == FALSE)
+		{
+			g_set_error (error, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY,
+					_("%s is a directory"), g_vfs_gdata_file_get_gvfs_path (file));
+			g_object_unref (service);
+			return NULL;
+		}
+		else
+		{
+			GList *element = NULL;
+			const gchar *folder_id = gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (entry));
+			GDataDocumentsQuery *query;
+			gboolean is_root = g_vfs_gdata_file_is_root (file);
+
+			new_file = g_file_new_for_path (local_path);
+			g_file_make_directory (new_file, cancellable, error);
+			if (*error != NULL)
+			{
+				if (new_file != NULL)
+					g_object_unref (new_file);
+				return NULL;
+			}
+
+			/*We check if the folder_id is the root directory*/
+			if (!is_root)
+			{
+				query  = gdata_documents_query_new (NULL);
+				gdata_documents_query_set_folder_id (query, folder_id);
+			}
+			tmp_feed = gdata_documents_service_query_documents (service, query, cancellable, NULL, NULL, error);
+			if (query != NULL)
+				g_object_unref (query);
+			if (*error != NULL)
+			{
+				if (tmp_feed != NULL)
+					g_object_unref (tmp_feed);
+				return NULL;
+			}
+			for (element = gdata_feed_get_entries (GDATA_FEED (tmp_feed)); element != NULL; element = element->next)
+			{
+				gchar *new_destination_directory = g_strconcat (local_path, gdata_documents_entry_get_document_id (element->data), NULL);
+				/* If it's the root directory, we check that the document is not contained in another folder*/
+				if (is_root)
+				{
+					gchar *path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (element->data));
+					GFile *test_file = g_file_new_for_path (path);
+					GFile *parent = g_file_get_parent (test_file);
+					if (parent != NULL)
+						g_object_unref (parent);
+					else
+						g_vfs_gdata_file_download_file (file, content_type, new_destination_directory, replace_file_if_exists, TRUE, cancellable, error);
+					g_object_unref (test_file);
+					g_free (path);
+				}
+				else
+					g_vfs_gdata_file_download_file (file, content_type, new_destination_directory, replace_file_if_exists, TRUE, cancellable, error);
+
+				if (*error != NULL)
+				{
+					if (tmp_feed != NULL)
+						g_object_unref (tmp_feed);
+					return NULL;
+				}
+			}
+		}
+	}
+	else if (GDATA_IS_DOCUMENTS_SPREADSHEET (entry))
+	{
+		new_file = g_file_new_for_path (local_path);
+		new_file = gdata_documents_spreadsheet_download_document (GDATA_DOCUMENTS_SPREADSHEET (entry),
+													   service, content_type, GDATA_DOCUMENTS_SPREADSHEET_ODS, -1,
+													   new_file, replace_file_if_exists,
+													   cancellable, error);
+	}
+	else if (GDATA_IS_DOCUMENTS_TEXT (entry))
+	{
+		new_file = g_file_new_for_path (local_path);
+		new_file = gdata_documents_text_download_document (GDATA_DOCUMENTS_TEXT (entry),
+												service, content_type, GDATA_DOCUMENTS_TEXT_ODT,
+												new_file, replace_file_if_exists,
+												cancellable, error);
+	
+	}
+	else if (GDATA_IS_DOCUMENTS_PRESENTATION (entry))
+	{
+		new_file = g_file_new_for_path (local_path);
+		new_file = gdata_documents_presentation_download_document (GDATA_DOCUMENTS_PRESENTATION (entry),
+														service, content_type, GDATA_DOCUMENTS_PRESENTATION_PPT,
+														new_file, replace_file_if_exists,
+														cancellable, error);
+	}
+	else
+	{
+		g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+				_("%s is not a supported document type"), g_vfs_gdata_file_get_gvfs_path (file));
+		g_object_unref (file);
+		if (service != NULL)
+			g_object_unref (service);
+		return NULL;
+	}
+
+	return new_file;
 }
 
 static void 

@@ -50,7 +50,7 @@ GType g_vfs_gdata_file_get_type (void) G_GNUC_CONST;
 
 gchar *g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path);
 gchar *g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path);
-gchar *g_vfs_gdata_get_parent_id_from_gvfs (const gchar *path);
+gchar *g_vfs_gdata_file_get_parent_id_from_gvfs (const gchar *path);
 GVfsGDataFile *g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_path, GCancellable *cancellable, GError **error);
 GVfsGDataFile *g_vfs_gdata_file_new_folder_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_path, GCancellable *cancellable, GError **error);
 GVfsGDataFile *g_vfs_gdata_file_new_from_gdata (GVfsBackendGdocs *backend, GDataEntry *gdata_entry, GError **error);
@@ -61,8 +61,10 @@ GDataEntry *g_vfs_gdata_file_get_gdata_entry (const GVfsGDataFile *file);
 const gchar *g_vfs_gdata_file_get_gvfs_path (const GVfsGDataFile *file);
 GVfsBackendGdocs *g_vfs_gdata_file_get_backend (const GVfsGDataFile *file);
 gboolean g_vfs_gdata_file_equal (const GVfsGDataFile *a, const GVfsGDataFile *b);
-gboolean g_vfs_gdata_file_is_folder (const GVfsGDataFile *file);
 GFileInfo *g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeMatcher *matcher, GError **error);
+gboolean g_vfs_gdata_file_is_folder (const GVfsGDataFile *file);
+GFile *g_vfs_gdata_file_download_file (GVfsGDataFile *file, gchar **content_type, gchar *local_path,
+								gboolean replace_file_if_exists, gboolean download_folders, GCancellable *cancellable, GError **error);
 
 G_END_DECLS
 

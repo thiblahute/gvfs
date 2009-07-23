@@ -281,7 +281,7 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 	GVfsGDataFile *source_gdata_file, *destination_folder;
 	GDataDocumentsEntry *new_entry;
 	GError *error = NULL;
-	GCancellable *cancellable;
+	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
 
 	if (flags & G_FILE_COPY_BACKUP)
     {
@@ -292,7 +292,6 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
                            _("backups not supported yet"));
       return;
     }
-	cancellable = G_VFS_JOB (job)->cancellable;
 
 	source_gdata_file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), source, NULL, NULL);
 
@@ -386,16 +385,13 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 	GError *error = NULL;
 	GList *i; /*GDataDocumentsEntry*/
 	GFileInfo *info;
+	gchar *folder_id = g_vfs_gdata_file_get_document_id_from_gvfs (dirname);
 
 	query = gdata_documents_query_new (NULL);
 	if (strcmp (dirname, "/") != 0)
 	{
-		gchar *folder_id = g_vfs_gdata_file_get_document_id_from_gvfs (dirname);
-		g_print ("FolderId: %s\n", folder_id);
-
 		/*Sets the query folder id*/
 		gdata_documents_query_set_folder_id (query, folder_id);
-		g_free (folder_id);
 	}
 	gdata_documents_query_set_show_folders (query, TRUE);
 
@@ -405,20 +401,21 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
+		g_free (folder_id);
 	}
 
 	for (i = gdata_feed_get_entries (GDATA_FEED (documents_feed)); i != NULL; i = i->next)
 	{
 		info = NULL;
-		gchar *path, **strv_path;
+		gchar *path, **strv_path, *parent_id;
 
 		path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (i->data));
-		strv_path = g_strsplit (path, "/", 3);
+		parent_id = g_vfs_gdata_file_get_parent_id_from_gvfs (path);
 
-		/*We check if the file is in the selected folder or in the root one*/
-		if (g_strv_length (strv_path) < 4 || g_strcmp0 (path, "/") == 0)
+		/*We check if that the file is in the selected folder (not in a child of it)*/
+		if (g_strcmp0 (folder_id, parent_id) == 0)
 		{
-			GVfsGDataFile *file = g_vfs_gdata_file_new_from_gdata (backend, GDATA_ENTRY (i->data), &error);
+			GVfsGDataFile *file = g_vfs_gdata_file_new_from_gdata (G_VFS_BACKEND_GDOCS (backend), GDATA_ENTRY (i->data), &error);
 
 			if (g_vfs_gdata_file_is_folder (file))
 				g_print ("FOLDER ID: ==%s== ", gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (file))));
@@ -427,6 +424,7 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 			{
 				g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 				g_error_free (error);
+				g_free (folder_id);
 				return;
 			}
 
@@ -435,11 +433,13 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 			{
 				g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 				g_error_free (error);
+				g_free (folder_id);
 				return;
 			}
 			g_vfs_job_enumerate_add_info (job, info);
 		}
 		g_free (path);
+		g_free (parent_id);
 		g_strfreev (strv_path);
 	}
 
@@ -516,12 +516,11 @@ do_delete (GVfsBackend *backend,
 	GVfsGDataFile *file = g_vfs_gdata_file_new_from_gvfs (backend, filename, cancellable, &error);
 
 	/*TODO use the error as test*/
-	if (file == NULL)
+	if (error != NULL)
 	{
 		g_print ("BAckend Error adress: %p\n", error);
 		g_print ("BAckend &Error adress: %p\n", &error);
-		g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
-								  _("%s not found"), filename);
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		return;
 	}
 	gdata_service_delete_entry (service,
@@ -557,12 +556,13 @@ do_query_info_on_write (GVfsBackend *backend,
 		return;
 	}
 
-	g_vfs_gdata_file_get_info (file, info, matcher, &error);
+	info = g_vfs_gdata_file_get_info (file, info, matcher, &error);
 
 	if (error == NULL)
 	{
 		g_vfs_job_succeeded (G_VFS_JOB (job));
 		g_object_unref (file);
+	}
 	else
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), &error);
@@ -580,33 +580,35 @@ do_replace (GVfsBackend *backend,
 	    gboolean make_backup,
 	    GFileCreateFlags flags)
 {
+	GError *error = NULL;
 	GVfsGDataFile *file;
+	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
 
 	if (make_backup)
 	{
 		/* FIXME: implement! */
-		g_set_error_literal (&task.error,
+		g_set_error_literal (&error,
 				G_IO_ERROR,
 				G_IO_ERROR_CANT_CREATE_BACKUP,
 				_("backups not supported yet"));
-		g_vfs_ftp_task_done (&task);
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		return;
 	}
 
-	file = g_vfs_ftp_file_new_from_gvfs (backend, filename);
+	file = g_vfs_gdata_file_new_from_gvfs (backend, filename, cancellable, &error);
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		return;
+	}
 	if (g_strcmp0 (etag, gdata_entry_get_etag (g_vfs_gdata_file_get_gdata_entry (file))) != 0)
 	{
-		g_free (current_etag);
 		g_set_error_literal (&error,
 				G_IO_ERROR,
 				G_IO_ERROR_WRONG_ETAG,
 				_("The file was externally modified"));
 	}
-
-		g_vfs_ftp_dir_cache_purge_file (ftp->dir_cache, file);
-		g_vfs_ftp_file_free (file);
-
-		g_vfs_ftp_task_done (&task);
+	/*TODO*/
 }
 
 
@@ -617,66 +619,36 @@ do_write (GVfsBackend *backend,
 	  char *buffer,
 	  gsize buffer_size)
 {
-  GVfsBackendSmb *op_backend = G_VFS_BACKEND_SMB (backend);
-  SmbWriteHandle *handle = _handle;
-  ssize_t res;
-  smbc_write_fn smbc_write;
-
-  smbc_write = smbc_getFunctionWrite (op_backend->smb_context);
-  res = smbc_write (op_backend->smb_context, handle->file,
-					buffer, buffer_size);
-  if (res == -1)
-    g_vfs_job_failed_from_errno (G_VFS_JOB (job), errno);
-  else
-    {
-      g_vfs_job_write_set_written_size (job, res);
-      g_vfs_job_succeeded (G_VFS_JOB (job));
-    }
 }
 
 static void
-do_seek_on_write (GVfsBackend *backend,
-		  GVfsJobSeekWrite *job,
-		  GVfsBackendHandle _handle,
-		  goffset    offset,
-		  GSeekType  type)
+do_pull (GVfsBackend *backend, GVfsJobPull *job, const char *source, const char *local_path, GFileCopyFlags flags, 
+		 gboolean remove_source, GFileProgressCallback progress_callback, gpointer progress_callback_data)
 {
-  GVfsBackendSmb *op_backend = G_VFS_BACKEND_SMB (backend);
-  SmbWriteHandle *handle = _handle;
-  int whence;
-  off_t res;
-  smbc_lseek_fn smbc_lseek;
+	gchar *content_type;
+	GError *error = NULL;
+	gboolean replace_if_exists = FALSE;
+	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
+	GDataDocumentsService *service = GDATA_DOCUMENTS_SERVICE (G_VFS_BACKEND_GDOCS (backend)->service);
+	GVfsGDataFile *file =  g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), source, cancellable, &error);
+	GFile *new_file;
 
-  switch (type)
-    {
-    case G_SEEK_SET:
-      whence = SEEK_SET;
-      break;
-    case G_SEEK_CUR:
-      whence = SEEK_CUR;
-      break;
-    case G_SEEK_END:
-      whence = SEEK_END;
-      break;
-    default:
-      g_vfs_job_failed (G_VFS_JOB (job),
-			G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
-			_("Unsupported seek type"));
-      return;
-    }
+	if (flags & G_FILE_COPY_OVERWRITE)
+		replace_if_exists = TRUE;
 
-  smbc_lseek = smbc_getFunctionLseek (op_backend->smb_context);
-  res = smbc_lseek (op_backend->smb_context, handle->file, offset, whence);
+	new_file = g_vfs_gdata_file_download_file (file, &content_type, local_path, replace_if_exists, FALSE, cancellable, &error);
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		if (new_file != NULL)
+			g_object_unref (new_file);
+		return;
+	}
+	if (new_file != NULL)
+		g_object_unref (new_file);
 
-  if (res == (off_t)-1)
-    g_vfs_job_failed_from_errno (G_VFS_JOB (job), errno);
-  else
-    {
-      g_vfs_job_seek_write_set_offset (job, res);
-      g_vfs_job_succeeded (G_VFS_JOB (job));
-    }
-
-  return;
+	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 static void
 g_vfs_backend_gdocs_class_init (GVfsBackendGdocsClass *klass)

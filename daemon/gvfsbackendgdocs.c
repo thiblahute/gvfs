@@ -401,6 +401,7 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 		return;
 	}
 
+	g_vfs_job_succeeded (G_VFS_JOB (job));
 	for (i = gdata_feed_get_entries (GDATA_FEED (documents_feed)); i != NULL; i = i->next)
 	{
 		info = NULL;
@@ -415,27 +416,25 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 		{
 			GVfsGDataFile *file = g_vfs_gdata_file_new_from_gdata (G_VFS_BACKEND_GDOCS (backend), GDATA_ENTRY (i->data), &error);
 
-			if (g_vfs_gdata_file_is_folder (file))
 
 			if (error != NULL)
 			{
-				g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-				g_error_free (error);
-				g_free (folder_id);
-				g_object_unref (service);
-				return;
+				g_print ("error getting the file");
+				g_clear_error (error);
 			}
-
-			info = g_vfs_gdata_file_get_info (file, info, matcher, error);
-			if (error != NULL)
-			{
-				g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-				g_error_free (error);
-				g_free (folder_id);
-				g_object_unref (service);
-				return;
+			else
+			{	
+				info = g_vfs_gdata_file_get_info (file, info, matcher, error);
+				if (error != NULL)
+				{
+					g_print ("error getting the infos");
+					g_clear_error (error);
+				}
+				else
+				{
+					g_vfs_job_enumerate_add_info (job, info);
+				}
 			}
-			g_vfs_job_enumerate_add_info (job, info);
 		}
 		g_free (path);
 		g_free (parent_id);
@@ -444,7 +443,6 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 	g_free (folder_id);
 	g_object_unref (service);
 	g_vfs_job_enumerate_done (job);
-	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
 static void

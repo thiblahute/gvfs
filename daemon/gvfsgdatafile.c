@@ -71,7 +71,8 @@ g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path)
 	gchar **entries_id_array, *entry_id = NULL;
 	gint i = 0;
 
-	g_return_val_if_fail (g_strcmp0 (path, "/") != 0, NULL);
+	if (g_strcmp0 (path, "/") == 0)
+		return g_strdup ("/");
 	entries_id_array = g_strsplit (path, "/", 0);
 
 	while (entries_id_array[i] != NULL)
@@ -96,24 +97,21 @@ g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path)
 gchar *
 g_vfs_gdata_file_get_parent_id_from_gvfs (const gchar *path)
 {
-	gchar **entries_id_array, *entry_id;
+	gchar **entries_id_array, *entry_id = NULL;
 	gint i = 0;
-	
-	g_return_val_if_fail (strcmp (path, "/") != 0, "/");
+
+	if (strcmp (path, "/") == 0)
+	   return g_strdup ("/");
+
 	entries_id_array = g_strsplit (path, "/", 0);
-	/*We get the before last entry ID*/
-	while (1)
+	entry_id = g_strdup (entries_id_array [g_strv_length (entries_id_array)-2]);
+	
+	if (g_strcmp0 (entry_id, "") == 0)
 	{
-		entry_id = entries_id_array[i];
-		i++;
-		if (entries_id_array[i] == NULL)
-		{
-			g_free (entry_id);
-			return NULL;
-		}
-		if (entries_id_array[i+1] == NULL)
-			break;
+		g_free (entry_id);
+		entry_id = g_strdup ("/");
 	}
+	g_strfreev (entries_id_array);
 	return entry_id;
 }
 
@@ -430,7 +428,6 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 		{
 			filename = gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (file->priv->gdata_entry));
 			gdata_documents_entry_get_edited (GDATA_DOCUMENTS_ENTRY (file->priv->gdata_entry), &t);
-			g_print ("ID: %s \n", gdata_entry_get_id(GDATA_ENTRY (file->priv->gdata_entry)));
 			g_file_info_set_name (info, filename);
 			//g_print ("Filename: %s ", filename);
 			if (*filename == '.')
@@ -655,27 +652,22 @@ g_vfs_gdata_file_download_file (GVfsGDataFile *file, gchar **content_type, gchar
 	else if (GDATA_IS_DOCUMENTS_SPREADSHEET (entry))
 	{
 		new_file = g_file_new_for_path (local_path);
-		new_file = gdata_documents_spreadsheet_download_document (GDATA_DOCUMENTS_SPREADSHEET (entry),
-													   service, content_type, GDATA_DOCUMENTS_SPREADSHEET_ODS, -1,
-													   new_file, replace_file_if_exists,
-													   cancellable, error);
+		new_file = gdata_documents_spreadsheet_download_document (GDATA_DOCUMENTS_SPREADSHEET (entry), service, content_type, GDATA_DOCUMENTS_SPREADSHEET_ODS, 
+																  -1, new_file, replace_file_if_exists, cancellable, error);
 	}
 	else if (GDATA_IS_DOCUMENTS_TEXT (entry))
 	{
 		new_file = g_file_new_for_path (local_path);
-		new_file = gdata_documents_text_download_document (GDATA_DOCUMENTS_TEXT (entry),
-												service, content_type, GDATA_DOCUMENTS_TEXT_ODT,
-												new_file, replace_file_if_exists,
-												cancellable, error);
+		new_file = gdata_documents_text_download_document (GDATA_DOCUMENTS_TEXT (entry), service, content_type, GDATA_DOCUMENTS_TEXT_ODT,
+														   new_file, replace_file_if_exists, cancellable, error);
 	
 	}
 	else if (GDATA_IS_DOCUMENTS_PRESENTATION (entry))
 	{
 		new_file = g_file_new_for_path (local_path);
-		new_file = gdata_documents_presentation_download_document (GDATA_DOCUMENTS_PRESENTATION (entry),
-														service, content_type, GDATA_DOCUMENTS_PRESENTATION_PPT,
-														new_file, replace_file_if_exists,
-														cancellable, error);
+		new_file = gdata_documents_presentation_download_document (GDATA_DOCUMENTS_PRESENTATION (entry), service, content_type,
+															  	   GDATA_DOCUMENTS_PRESENTATION_PPT, new_file, replace_file_if_exists,
+		   														   cancellable, error);
 	}
 	else
 	{

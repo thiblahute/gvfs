@@ -141,8 +141,7 @@ do_mount (GVfsBackend *backend,
 			if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &ask_user,	NULL, FALSE,
 											  &password_save) || aborted)
 			{
-				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
-						_("Password dialog cancelled"));
+				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
 				g_free (username);
 				g_free (ask_user);
 				g_free (ask_password);
@@ -160,8 +159,7 @@ do_mount (GVfsBackend *backend,
 		if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &ask_user,	NULL, FALSE,
 					&password_save) || aborted)
 			{
-				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
-						_("Password dialog cancelled"));
+				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
 				g_free (username);
 				g_free (ask_user);
 				g_free (ask_password);
@@ -286,10 +284,7 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 	if (flags & G_FILE_COPY_BACKUP)
     {
       /* FIXME: implement? */
-      g_vfs_job_failed (G_VFS_JOB (job),
-                           G_IO_ERROR,
-                           G_IO_ERROR_CANT_CREATE_BACKUP,
-                           _("backups not supported yet"));
+      g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_CANT_CREATE_BACKUP, _("backups not supported yet"));
       return;
     }
 
@@ -333,9 +328,7 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 		}
 		if (!GDATA_IS_DOCUMENTS_ENTRY (new_entry))
 		{
-			g_vfs_job_failed (G_VFS_JOB (job),
-					G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
-					_("Error moving file %s"), source);
+			g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_NOT_FOUND, _("Error moving file %s"), source);
 			if (destination_folder != NULL)
 				g_object_unref (destination_folder);
 			return;
@@ -379,7 +372,7 @@ static void
 do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, GFileAttributeMatcher *matcher,
 		 	  GFileQueryInfoFlags query_flags)
 {
-	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
+	GDataDocumentsService *service = g_object_ref (G_VFS_BACKEND_GDOCS (backend)->service);
 	GDataDocumentsFeed *documents_feed;
 	GDataDocumentsQuery *query;
 	GError *error = NULL;
@@ -402,29 +395,34 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
 		g_free (folder_id);
+		g_object_unref (service);
+		if (documents_feed != NULL)
+			g_object_unref (documents_feed);
+		return;
 	}
 
 	for (i = gdata_feed_get_entries (GDATA_FEED (documents_feed)); i != NULL; i = i->next)
 	{
 		info = NULL;
-		gchar *path, **strv_path, *parent_id;
+		gchar *path, *parent_id;
 
 		path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (i->data));
 		parent_id = g_vfs_gdata_file_get_parent_id_from_gvfs (path);
 
-		/*We check if that the file is in the selected folder (not in a child of it)*/
+		g_print ("Path %s Folder ID %s, Parents ID %s\n", path, folder_id, parent_id);
+		/*We check that the file is in the selected folder (not in a child of it)*/
 		if (g_strcmp0 (folder_id, parent_id) == 0)
 		{
 			GVfsGDataFile *file = g_vfs_gdata_file_new_from_gdata (G_VFS_BACKEND_GDOCS (backend), GDATA_ENTRY (i->data), &error);
 
 			if (g_vfs_gdata_file_is_folder (file))
-				g_print ("FOLDER ID: ==%s== ", gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (file))));
 
 			if (error != NULL)
 			{
 				g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 				g_error_free (error);
 				g_free (folder_id);
+				g_object_unref (service);
 				return;
 			}
 
@@ -434,15 +432,17 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 				g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 				g_error_free (error);
 				g_free (folder_id);
+				g_object_unref (service);
 				return;
 			}
 			g_vfs_job_enumerate_add_info (job, info);
 		}
 		g_free (path);
 		g_free (parent_id);
-		g_strfreev (strv_path);
 	}
 
+	g_free (folder_id);
+	g_object_unref (service);
 	g_vfs_job_enumerate_done (job);
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
@@ -452,12 +452,21 @@ do_make_directory (GVfsBackend *backend,
                    GVfsJobMakeDirectory *job,
                    const char *filename)
 {
-	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
+	GDataDocumentsService *service = g_object_ref (G_VFS_BACKEND_GDOCS (backend)->service);
 	GDataDocumentsFolder *folder, *new_folder;
 	GError *error = NULL;
 	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
 	GDataCategory *folder_category;
 	gchar *title = g_vfs_gdata_file_get_document_id_from_gvfs (filename);
+
+	if (g_strcmp0 (title, "/") == 0)
+	{
+		g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, _("Can't create a root directory"));
+		g_free (title);
+		g_object_unref (service);
+		return;
+
+	}
 
 	folder = gdata_documents_folder_new (NULL);
 	folder_category = gdata_category_new ("http://schemas.google.com/docs/2007#folder", "http://schemas.google.com/g/2005#kind", "folder");
@@ -470,9 +479,11 @@ do_make_directory (GVfsBackend *backend,
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
+		g_object_unref (service);
 		return;
 	}
 
+	g_object_unref (service);
     g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
@@ -495,9 +506,7 @@ do_open_for_read (GVfsBackend *backend,
 
 	if (g_vfs_gdata_file_is_folder (file))
 	{
-        g_vfs_job_failed (G_VFS_JOB (job),
-                          G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY,
-                          _("Can't open directory"));
+        g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY, _("Can't open directory"));
 		return;
 	}
 }
@@ -509,7 +518,7 @@ do_delete (GVfsBackend *backend,
 {
 	GError *error=NULL;
 	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
-	GDataService *service = G_VFS_BACKEND_GDOCS (backend)->service;
+	GDataService *service = g_object_ref (G_VFS_BACKEND_GDOCS (backend)->service);
 
 	g_print ("BAckend Error adress: %p\n", error);
 	g_print ("BAckend &Error adress: %p\n", &error);
@@ -521,6 +530,7 @@ do_delete (GVfsBackend *backend,
 		g_print ("BAckend Error adress: %p\n", error);
 		g_print ("BAckend &Error adress: %p\n", &error);
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_object_unref (service);
 		return;
 	}
 	gdata_service_delete_entry (service,
@@ -530,10 +540,12 @@ do_delete (GVfsBackend *backend,
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
+		g_object_unref (service);
 		return;
 	}
 	g_print ("%s :deleted\n", gdata_entry_get_title (g_vfs_gdata_file_get_gdata_entry (file)));
 
+	g_object_unref (service);
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
@@ -629,7 +641,7 @@ do_pull (GVfsBackend *backend, GVfsJobPull *job, const char *source, const char 
 	GError *error = NULL;
 	gboolean replace_if_exists = FALSE;
 	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
-	GDataDocumentsService *service = GDATA_DOCUMENTS_SERVICE (G_VFS_BACKEND_GDOCS (backend)->service);
+	GDataDocumentsService *service = g_object_ref ((G_VFS_BACKEND_GDOCS (backend)->service));
 	GVfsGDataFile *file =  g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), source, cancellable, &error);
 	GFile *new_file;
 
@@ -643,11 +655,13 @@ do_pull (GVfsBackend *backend, GVfsJobPull *job, const char *source, const char 
 		g_error_free (error);
 		if (new_file != NULL)
 			g_object_unref (new_file);
+		g_object_unref (service);
 		return;
 	}
 	if (new_file != NULL)
 		g_object_unref (new_file);
 
+	g_object_unref (service);
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 static void
@@ -669,4 +683,5 @@ g_vfs_backend_gdocs_class_init (GVfsBackendGdocsClass *klass)
 	backend_class->unmount = do_unmount;
 	backend_class->delete = do_delete;
 	backend_class->replace = do_replace;
+	backend_class->pull = do_pull;
 }

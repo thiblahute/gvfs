@@ -398,7 +398,6 @@ g_vfs_gdata_file_get_gdata_entry (const GVfsGDataFile *file)
 /**
  * g_vfs_gdata_file_get_gvfs_path:
  * @file: a file
- * @info: a GFileInfo, if it's not %NULL, an error will be return
  *
  * Gets the GVfs path used to refer to @file.
  *
@@ -418,7 +417,8 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 	GFileType file_type;
 	GTimeVal t;
 	GIcon *icon;
-	gchar *content_type, *display_name;
+	gchar *content_type;
+	GString *display_name;
 	const gchar *filename;
 
 	info = g_file_info_new();
@@ -429,7 +429,6 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 			filename = gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (file->priv->gdata_entry));
 			gdata_documents_entry_get_edited (GDATA_DOCUMENTS_ENTRY (file->priv->gdata_entry), &t);
 			g_file_info_set_name (info, filename);
-			//g_print ("Filename: %s ", filename);
 			if (*filename == '.')
 				g_file_info_set_is_hidden (info, TRUE);
 			g_file_info_set_modification_time (info, &t);
@@ -440,21 +439,25 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 			return NULL;
 		}
 
-		display_name = g_filename_display_name (gdata_entry_get_title (file->priv->gdata_entry));
-		g_print ("DisplayName: %s\n", display_name);
-		if (g_strstr_len (display_name, strlen (display_name), "\357\277\275") != NULL)
+		display_name = g_string_new (gdata_entry_get_title (file->priv->gdata_entry));
+		if (g_strstr_len (display_name->str, strlen (display_name), "\357\277\275") != NULL)
+			g_string_append (display_name, _(" (invalid encoding)"));
+		else
 		{
-			gchar *p = display_name;
-			display_name = g_strconcat (display_name, _(" (invalid encoding)"), NULL);
-			g_free (p);
+			if (GDATA_IS_DOCUMENTS_SPREADSHEET (file->priv->gdata_entry))
+				g_string_append (display_name, ".ods");
+			else if (GDATA_IS_DOCUMENTS_TEXT (file->priv->gdata_entry))
+				g_string_append (display_name, ".odt");
+			else if (GDATA_IS_DOCUMENTS_PRESENTATION (file->priv->gdata_entry))
+				g_string_append (display_name, ".ppt");
 		}
-		g_file_info_set_display_name (info, display_name);
+		g_file_info_set_display_name (info, display_name->str);
 
-		file_type = G_FILE_TYPE_UNKNOWN;
 		if (g_vfs_gdata_file_is_folder (file))
 			file_type = G_FILE_TYPE_DIRECTORY;
 		else 
-			file_type = G_FILE_TYPE_DIRECTORY;
+			file_type = G_FILE_TYPE_REGULAR;
+
 		g_file_info_set_file_type (info, file_type);
 		g_file_info_set_size (info, 1000);
 
@@ -468,6 +471,7 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 
 			if (g_vfs_gdata_file_is_folder (file))
 			{
+				g_print ("Is folder\n?");
 				content_type = g_strdup ("inode/directory");
 				if (g_strcmp0 (file->priv->gvfs_path, "/") == 0)
 					icon = g_themed_icon_new ("folder-remote");
@@ -482,10 +486,8 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 					content_type = g_strdup ("application/vnd.oasis.opendocument.text");
 				else if (GDATA_IS_DOCUMENTS_PRESENTATION (file->priv->gdata_entry))
 					content_type = g_strdup ("application/vnd.ms-powerpoint");
-				else if (GDATA_IS_DOCUMENTS_TEXT (file->priv->gdata_entry))
-					content_type = g_strdup ("application/x-vnd.oasis.opendocument.spreadsheet");
 				else 
-					content_type = g_content_type_guess (display_name, NULL, 0, NULL);
+					content_type = g_content_type_guess (display_name->str, NULL, 0, NULL);
 				if (content_type)
 					icon = g_content_type_get_icon (content_type);
 			}
@@ -503,14 +505,13 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 			g_object_unref (icon);
 		}
 
-		g_free (display_name);
-
 		if (g_file_attribute_matcher_matches (matcher, G_FILE_ATTRIBUTE_ETAG_VALUE))
 		{
 			const gchar *etag = gdata_entry_get_etag (file->priv->gdata_entry);
 			g_file_info_set_attribute_string (info, G_FILE_ATTRIBUTE_ETAG_VALUE, etag);
 		}
 	}
+	g_string_free (display_name, TRUE);
 	
 	return info;
 }

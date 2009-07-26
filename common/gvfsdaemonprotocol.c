@@ -487,21 +487,21 @@ _g_dbus_get_file_info (DBusMessageIter *iter,
 
   info = g_file_info_new ();
 
-/*  if (dbus_message_iter_get_arg_type (iter) != DBUS_TYPE_STRUCT)
+  if (dbus_message_iter_get_arg_type (iter) != DBUS_TYPE_STRUCT)
     goto error;
-*/
+
   dbus_message_iter_recurse (iter, &struct_iter);
 
-/*if (dbus_message_iter_get_arg_type (&struct_iter) != DBUS_TYPE_ARRAY)
+  if (dbus_message_iter_get_arg_type (&struct_iter) != DBUS_TYPE_ARRAY)
     goto error;
-  */
+  
   dbus_message_iter_recurse (&struct_iter, &array_iter);
 
   while (dbus_message_iter_get_arg_type (&array_iter) == DBUS_TYPE_STRUCT)
     {
-      /*if (!_g_dbus_get_file_attribute (&array_iter, &attribute, &status, &type, &value))
+      if (!_g_dbus_get_file_attribute (&array_iter, &attribute, &status, &type, &value))
         goto error;
-*/
+
       g_file_info_set_attribute (info, attribute, type, _g_dbus_attribute_as_pointer (type, &value));
       if (status)
 	g_file_info_set_attribute_status (info, attribute, status);

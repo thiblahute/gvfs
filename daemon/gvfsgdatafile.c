@@ -63,7 +63,7 @@ G_DEFINE_TYPE (GVfsGDataFile, g_vfs_gdata_file, G_TYPE_OBJECT)
  * @path a gvfs path
  * If @path is the root, return NULL
  *
- * Returns: the GDataDocuments::id corresponding to @path
+ * Returns: the #GDataDocumentsEntry::id corresponding to @path
  * */
 gchar *
 g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path)
@@ -134,9 +134,15 @@ GVfsGDataFile *
 g_vfs_gdata_file_new_folder_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_path, GCancellable *cancellable, GError **error)
 {
 	GVfsGDataFile *folder;
+
 	folder = g_vfs_gdata_file_new_from_gvfs (backend, gvfs_path, cancellable, error);
-	g_return_val_if_fail (error == NULL, NULL);
-	
+	if (*error != NULL)
+	{
+		if (folder != NULL)
+			g_object_unref (folder);
+		return NULL;
+	}
+
 	if (!g_vfs_gdata_file_is_folder (folder))
 	{
 		g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_DIRECTORY,
@@ -156,7 +162,7 @@ g_vfs_gdata_file_new_folder_from_gvfs (GVfsBackendGdocs *backend, const gchar *g
  * Constructs a new #GVfsGDataFile representing the given gvfs path.
  * If this is the root directory, the GVfsGDataFile::gdata-entry will be %NULL
  *
- * Returns: a new GVfsGDataFile, or %NULL 
+ * Returns: a new GVfsGDataFile, o %NULL 
  * If the file doesn't exit, a G_IO_ERROR_NOT_FOUND is set.
  * If there was an error trying to get the feed, the server error is set.
  **/
@@ -175,23 +181,27 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 	g_return_val_if_fail (gvfs_path != NULL, NULL);
 	
 	entry_id = g_vfs_gdata_file_get_document_id_from_gvfs (gvfs_path);
-	if (entry_id == NULL)
+	if (g_strcmp0 (entry_id, "/") == 0)
 	{
 		return g_object_new (G_VFS_TYPE_GDATA_FILE, 
 							 "backend", backend,
 							 NULL);
 	}
 
-	/*entry_query = gdata_documents_query_new (NULL);
-	gdata_query_set_entry_id (GDATA_QUERY (entry_query), entry_id);
-	g_free (entry_id);*/
+	/* TODO in libgdata
+	 * entry_query = gdata_documents_query_new (NULL);
+	 * gdata_query_set_entry_id (GDATA_QUERY (entry_query), entry_id);
+	 * g_free (entry_id);*/
 
-	/*Get the entry (as feed) on the server*/
+	/*Get entries (as feed) on the server*/
 	entry_query = gdata_documents_query_new (NULL);
 	gdata_documents_query_set_show_folders (entry_query, TRUE);
+	g_print ("Entry id before querying docs: %s... service adress: %p entry_query adress %p, cancellable adress %p, error adress %p \n", 
+			entry_id, service, entry_query, cancellable, error);
+
 	tmp_feed = gdata_documents_service_query_documents (service, entry_query, cancellable, NULL, NULL, error);
+	g_print ("  Number of items by page: %d, total number of items: %d\n", gdata_feed_get_items_per_page (tmp_feed), gdata_feed_get_items_per_page (tmp_feed));
 	g_object_unref (entry_query);
-	
 	if (*error != NULL)
 	{
 		g_print ("Error getting the feed");
@@ -222,8 +232,6 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 	}
 
 	file = g_object_new (G_VFS_TYPE_GDATA_FILE, "backend", backend, "gdata-entry", GDATA_ENTRY (entry), "gvfs-path", gvfs_path, NULL);
-
-	g_print ("Gvfs path: %s\n", g_vfs_gdata_file_get_gvfs_path (file));
 
 	g_object_unref (tmp_feed);
 	g_object_unref (service);
@@ -488,12 +496,11 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 					content_type = g_strdup ("application/vnd.ms-powerpoint");
 				else 
 					content_type = g_content_type_guess (display_name->str, NULL, 0, NULL);
-				if (content_type)
-					icon = g_content_type_get_icon (content_type);
 			}
 
 			if (content_type)
 			{
+				icon = g_content_type_get_icon (content_type);
 				g_file_info_set_content_type (info, content_type);
 				g_free (content_type);
 			}

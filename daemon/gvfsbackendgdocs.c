@@ -275,8 +275,8 @@ void
 do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char *destination, GFileCopyFlags flags,
 		   GFileProgressCallback progress_callback, gpointer progress_callback_data)
 {
-	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
-	GVfsGDataFile *source_gdata_file, *destination_folder;
+	GDataDocumentsService *service = g_object_ref (G_VFS_BACKEND_GDOCS (backend)->service);
+	GVfsGDataFile *source_file = NULL, *destination_folder = NULL;
 	GDataDocumentsEntry *new_entry;
 	GError *error = NULL;
 	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
@@ -288,42 +288,48 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
       return;
     }
 
-	source_gdata_file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), source, NULL, NULL);
+	source_file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), source, cancellable, &error);
 
 	if (error != NULL)
 	{
 		g_print ("Error making GVfsGDataFile\n");
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (source_gdata_file != NULL)
-			g_object_unref (source_gdata_file);
+		g_object_unref (service);
+		if (source_file != NULL)
+			g_object_unref (source_file);
 		return;
 	}
 
-	if (strcmp (destination, "/") != 0)
+
+	g_print ("\n\nDestination: %s\n", destination);
+	if (g_strcmp0 (destination, "/") != 0)
 	{
 		destination_folder = g_vfs_gdata_file_new_folder_from_gvfs (G_VFS_BACKEND_GDOCS (backend), destination, cancellable, &error);
 
 		if (error != NULL)
 		{
+			g_print ("Error making GVfsGDataFile::destination_folder\n");
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 			g_error_free (error);
 			if (destination_folder != NULL)
 				g_object_unref (destination_folder);
+			g_object_unref (service);
 			return;
 		}
 
 		/*Move the document on the server*/
 		new_entry = gdata_documents_service_move_document_to_folder (service,
-																	 GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_gdata_file)),
+																	 GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_file)),
 																	 GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (destination_folder)),
 																	 cancellable, &error);
 		if (error != NULL)
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 			g_error_free (error);
-			g_object_unref (source_gdata_file);
+			g_object_unref (source_file);
 			g_object_unref (destination_folder);
+			g_object_unref (service);
 			return;
 		}
 		if (!GDATA_IS_DOCUMENTS_ENTRY (new_entry))
@@ -334,7 +340,7 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 			return;
 		}
 
-		g_object_unref (source_gdata_file);
+		g_object_unref (source_file);
 		g_object_unref (destination_folder);
 	}
 	else
@@ -344,25 +350,28 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 			g_error_free (error);
-			g_object_unref (source_gdata_file);
+			g_object_unref (source_file);
 			g_object_unref (destination_folder);
+			g_object_unref (service);
 			return;
 		}
 		new_entry = gdata_documents_service_remove_document_from_folder (service, 
-															 GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_gdata_file)), 
+															 GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_file)), 
 															 GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (destination_folder)),
 														     cancellable, &error);
 		if (error != NULL)
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 			g_error_free (error);
-			g_object_unref (source_gdata_file);
+			g_object_unref (source_file);
 			g_object_unref (destination_folder);
+			g_object_unref (service);
 			return;
 		}
-		g_object_unref (source_gdata_file);
+		g_object_unref (source_file);
 		g_object_unref (destination_folder);
 	}
+	g_object_unref (service);
 
     g_vfs_job_succeeded (G_VFS_JOB (job));
 
@@ -373,6 +382,7 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 		 	  GFileQueryInfoFlags query_flags)
 {
 	GDataDocumentsService *service = g_object_ref (G_VFS_BACKEND_GDOCS (backend)->service);
+	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
 	GDataDocumentsFeed *documents_feed;
 	GDataDocumentsQuery *query;
 	GError *error = NULL;
@@ -385,11 +395,13 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 	{
 		/*Sets the query folder id*/
 		gdata_documents_query_set_folder_id (query, folder_id);
+		g_print ("Folder ID: %s", folder_id);
 	}
 	gdata_documents_query_set_show_folders (query, TRUE);
 
-	documents_feed = gdata_documents_service_query_documents (service, query, NULL, NULL, NULL, &error);
-	
+	documents_feed = gdata_documents_service_query_documents (service, query, cancellable, NULL, NULL, &error);
+	g_print ("Folder ID: %s", folder_id);
+	g_object_unref (query);
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);

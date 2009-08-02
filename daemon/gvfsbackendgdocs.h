@@ -47,16 +47,18 @@ GType g_vfs_backend_gdocs_get_type (void) G_GNUC_CONST;
 
 struct _GVfsBackendGdocsClass
 {
-  GVfsBackendClass parent_class;
-
+	GVfsBackendClass parent_class;
 };
 
 struct _GVfsBackendGdocs
 {
-  GVfsBackend	parent_instance;
+	GVfsBackend	parent_instance;
 
-  GDataDocumentsService *service;
+	GDataDocumentsService *service;
+	GHashTable *entries_type;
 };
+
+void g_vfs_backend_gdocs_rebuild_entries_type (GVfsBackendGdocs *backend, GCancellable *cancellable, GError **error);
 
 G_END_DECLS
 

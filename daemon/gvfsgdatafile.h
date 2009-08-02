@@ -49,7 +49,6 @@ typedef struct {
 GType g_vfs_gdata_file_get_type (void) G_GNUC_CONST;
 
 gchar *g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path);
-gchar *g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path);
 gchar *g_vfs_gdata_file_get_parent_id_from_gvfs (const gchar *path);
 GVfsGDataFile *g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_path, GCancellable *cancellable, GError **error);
 GVfsGDataFile *g_vfs_gdata_file_new_folder_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_path, GCancellable *cancellable, GError **error);
@@ -63,8 +62,9 @@ GVfsBackendGdocs *g_vfs_gdata_file_get_backend (const GVfsGDataFile *file);
 gboolean g_vfs_gdata_file_equal (const GVfsGDataFile *a, const GVfsGDataFile *b);
 GFileInfo *g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeMatcher *matcher, GError **error);
 gboolean g_vfs_gdata_file_is_folder (const GVfsGDataFile *file);
-GFile *g_vfs_gdata_file_download_file (GVfsGDataFile *file, gchar **content_type, gchar *local_path,
+GFile *g_vfs_gdata_file_download_file (GVfsGDataFile *file, gchar **content_type, const gchar *local_path,
 								gboolean replace_file_if_exists, gboolean download_folders, GCancellable *cancellable, GError **error);
+gchar *g_vfs_gdata_file_get_download_uri (GVfsGDataFile *file, GCancellable *cancellable, GError **error);
 
 G_END_DECLS
 

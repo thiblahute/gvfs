@@ -540,7 +540,7 @@ g_vfs_gdata_file_is_folder (const GVfsGDataFile *file)
 gchar *
 g_vfs_gdata_file_get_download_uri (GVfsGDataFile *file, GCancellable *cancellable, GError **error)
 {
-	/*
+	
 	GDataDocumentsEntry *entry;
 
 	g_return_val_if_fail (G_VFS_IS_GDATA_FILE (file), NULL);
@@ -571,7 +571,7 @@ g_vfs_gdata_file_get_download_uri (GVfsGDataFile *file, GCancellable *cancellabl
 				_("%s is not a supported document type"), g_vfs_gdata_file_get_gvfs_path (file));
 		g_object_unref (file);
 		return NULL;
-	}*/
+	}
 }
 
 /* g_vfs_gdata_file_download_file

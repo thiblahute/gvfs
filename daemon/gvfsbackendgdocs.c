@@ -808,6 +808,31 @@ do_write (GVfsBackend *backend,
   g_vfs_ftp_task_done (&task);*/
 }
 
+/*static void
+do_create (GVfsBackend *backend,
+           GVfsJobOpenForWrite *job,
+           const char *filename,
+           GFileCreateFlags flags)
+{
+	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
+	GError *error = NULL;
+	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
+	gchar *entry_name =  g_vfs_gdata_file_get_document_id_from_gvfs (filename);
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		if (file != NULL)
+			g_object_unref (file);
+		return;
+	}
+
+	g_vfs_ftp_dir_cache_purge_file (ftp->dir_cache, file);
+	g_vfs_ftp_file_free (file);
+
+	g_vfs_ftp_task_done (&task);
+}*/
+
 static void
 g_vfs_backend_gdocs_class_init (GVfsBackendGdocsClass *klass)
 {
@@ -832,5 +857,6 @@ g_vfs_backend_gdocs_class_init (GVfsBackendGdocsClass *klass)
 	backend_class->close_read = do_close_read;
 	backend_class->close_write = do_close_write;
 	backend_class->write = do_write;
+/*	backend_class->create = do_create;*/
 
 }

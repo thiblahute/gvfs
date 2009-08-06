@@ -504,7 +504,7 @@ do_open_for_read (GVfsBackend *backend,
 {
 	gchar *uri;
 	SoupMessage *msg;
-	GInputStream *stream;
+	GDataInputStream *stream;
 	GError *error = NULL;
 	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
 	GVfsBackendGdocs *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
@@ -542,7 +542,7 @@ do_read (GVfsBackend *backend, GVfsJobRead *job, GVfsBackendHandle handle, char 
 {
 	gssize n_bytes;
 	GError *error = NULL;
-	GInputStream *stream = G_INPUT_STREAM (handle);
+	GDataInputStream *stream = G_INPUT_STREAM (handle);
 	GVfsBackendGdocs *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 
 	n_bytes = g_input_stream_read (stream, buffer, bytes_requested, G_VFS_JOB (job)->cancellable, &error);
@@ -765,73 +765,142 @@ do_pull (GVfsBackend *backend, GVfsJobPull *job, const char *source, const char 
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
-static void
-do_close_write (GVfsBackend *backend,
-                GVfsJobCloseWrite *job,
-                GVfsBackendHandle handle)
+typedef struct {
+	GDataUploadStream *output_stream;
+	GVfsGDataFile *file;
+} GDocsWriteHandle;
+
+void gdocs_write_handle_free (GDocsWriteHandle *handle)
 {
-/*  GVfsBackendFtp *ftp = G_VFS_BACKEND_FTP (backend);
-  GVfsFtpTask task = G_VFS_FTP_TASK_INIT (ftp, G_VFS_JOB (job));
-
-  g_vfs_ftp_task_give_connection (&task, handle);
-
-  g_vfs_ftp_task_close_data_connection (&task);
-  g_vfs_ftp_task_receive (&task, 0, NULL);
-
-  g_vfs_ftp_task_done (&task);*/
+	if (handle->file != NULL)
+		g_object_unref (handle->file);
+	if (handle->output_stream != NULL)
+		g_object_unref (handle->output_stream);
+	g_free (handle);
 }
 
 static void
-do_write (GVfsBackend *backend,
-          GVfsJobWrite *job,
-          GVfsBackendHandle handle,
-          char *buffer,
-          gsize buffer_size)
+do_create (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filename, GFileCreateFlags flags)
 {
-/*  GVfsBackendFtp *ftp = G_VFS_BACKEND_FTP (backend);
-  GVfsFtpTask task = G_VFS_FTP_TASK_INIT (ftp, G_VFS_JOB (job));
-  GVfsFtpConnection *conn = handle;
-  GOutputStream *output;
-  gssize n_bytes;
-
-  output = g_io_stream_get_output_stream (g_vfs_ftp_connection_get_data_stream (conn));
-
-  n_bytes = g_output_stream_write (output,
-                                   buffer,
-                                   buffer_size,
-                                   task.cancellable,
-                                   &task.error);
-           
-  if (n_bytes >= 0)
-    g_vfs_job_write_set_written_size (job, n_bytes);
-
-  g_vfs_ftp_task_done (&task);*/
-}
-
-/*static void
-do_create (GVfsBackend *backend,
-           GVfsJobOpenForWrite *job,
-           const char *filename,
-           GFileCreateFlags flags)
-{
-	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
 	GError *error = NULL;
+	GDataCategory *category;
+	GDocsWriteHandle *handle = NULL;
+	GDataUploadStream *output_stream = NULL;
+	GDataDocumentsEntry *entry = NULL;
+	const gchar *title, *content_type;
+	gchar *upload_uri = NULL, *tmp = NULL, *folder_id = NULL;
+	GFile *file = g_file_new_for_path (filename);
 	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
-	gchar *entry_name =  g_vfs_gdata_file_get_document_id_from_gvfs (filename);
+	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
+	GFileInfo *file_info =  g_file_query_info (file, "standard::display-name,standard::content-type", G_FILE_QUERY_INFO_NONE, NULL, &error);
+	g_object_unref (file);
+
+	content_type = g_file_info_get_content_type (file_info);
+	title = g_file_info_get_display_name (file_info);
+
+
+	folder_id = g_vfs_gdata_file_get_parent_id_from_gvfs (filename);
+	if (folder_id != NULL)
+		tmp = upload_uri = g_strconcat ("http://docs.google.com/feeds/folders/private/full/folder%3A", folder_id, NULL);
+	else
+		upload_uri = "http://docs.google.com/feeds/documents/private/full";
+
+	output_stream = gdata_upload_stream_new (service, upload_uri, NULL, title, content_type);
+	g_free (tmp);
+	
+	handle = g_new0 (GDocsWriteHandle, 1);
+	handle->file = NULL;
+	handle->output_stream = output_stream;
+
+	g_object_unref (file_info);
+
+	g_vfs_job_open_for_write_set_can_seek (job, FALSE);
+	g_vfs_job_open_for_write_set_handle (job, handle);
+	g_vfs_job_succeeded (G_VFS_JOB (job));
+}
+
+static void
+do_append_to (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filename, GFileCreateFlags flags)
+{
+	GError *error = NULL;
+	GFileInfo *file_info;
+	gchar *slug, content_type;
+	GDataEntry *entry = NULL;
+	GDocsWriteHandle *handle = NULL;
+	GDataUploadStream *output_stream = NULL;
+	GFile *file = g_file_new_for_path (filename);
+	gchar *upload_uri = NULL, *tmp = NULL, *folder_id = NULL;
+	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
+	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
+	GVfsGDataFile *gdata_file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (file != NULL)
-			g_object_unref (file);
+		g_object_unref (file);
+		if (gdata_file != NULL)
+			g_object_unref (gdata_file);
 		return;
 	}
 
-	g_vfs_ftp_dir_cache_purge_file (ftp->dir_cache, file);
-	g_vfs_ftp_file_free (file);
+	file_info =  g_file_query_info (file, "standard::display-name,standard::content-type", G_FILE_QUERY_INFO_NONE, NULL, &error);
+	g_object_unref (file);
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		g_object_unref (gdata_file);
+		if (file_info != NULL)
+			g_object_unref (file_info);
+		return;
+	}
+	content_type = g_file_info_get_content_type (file_info);
+	slug = g_file_info_get_display_name (file_info);
 
-	g_vfs_ftp_task_done (&task);
-}*/
+	entry = GDATA_ENTRY (g_vfs_gdata_file_get_gdata_entry (gdata_file));
+	upload_uri = gdata_entry_look_up_link (GDATA_ENTRY (entry), GDATA_LINK_EDIT_MEDIA);
+	output_stream = gdata_upload_stream_new (service, gdata_link_get_uri (upload_uri), entry, slug, content_type);
+
+	handle = g_new0 (GDocsWriteHandle, 1);
+	handle->file = gdata_file;
+	handle->output_stream = output_stream;
+
+	g_object_unref (file_info);
+
+	g_vfs_job_open_for_write_set_can_seek (job, FALSE);
+	g_vfs_job_open_for_write_set_handle (job, handle);
+	g_vfs_job_succeeded (G_VFS_JOB (job));
+}
+
+static void
+do_write (GVfsBackend *backend, GVfsJobWrite *job,  GVfsBackendHandle _handle, char *buffer, gsize buffer_size)
+{
+	gssize n_bytes;
+	GError *error = NULL;
+	GDocsWriteHandle *handle = _handle;
+	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
+	GDataUploadStream *output_stream = handle->output_stream;
+
+	n_bytes = g_output_stream_write (output_stream, buffer, buffer_size, cancellable, &error);
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		return;
+	}
+
+	if (n_bytes >= 0)
+		g_vfs_job_write_set_written_size (job, n_bytes);
+
+	g_vfs_job_succeeded (G_VFS_JOB (job));
+}
+
+static void
+do_close_write (GVfsBackend *backend, GVfsJobCloseWrite *job, GVfsBackendHandle _handle)
+{
+	GDocsWriteHandle *handle = _handle;
+	gdocs_write_handle_free (handle);
+}
 
 static void
 g_vfs_backend_gdocs_class_init (GVfsBackendGdocsClass *klass)

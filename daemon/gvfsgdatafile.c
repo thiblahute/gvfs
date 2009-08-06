@@ -118,7 +118,7 @@ g_vfs_gdata_file_get_parent_id_from_gvfs (const gchar *path)
 
 /**
  * g_vfs_gdata_file_new_folder_from_gvfs:
- * @gdata: the gdata backend this file is to be used on
+ * @backend: the gdata backend this file is to be used on
  * @gvfs_path: gvfs path to create the file from
  * @cancellable: a GCancellable or %NULL
  * @error: a GError or %NULL
@@ -163,7 +163,7 @@ g_vfs_gdata_file_new_folder_from_gvfs (GVfsBackendGdocs *backend, const gchar *g
 }
 /**
  * g_vfs_gdata_file_new_from_gvfs:
- * @gdata: the gdata backend this file is to be used on
+ * @backend: the gdata backend this file is to be used on
  * @gvfs_path: gvfs path to create the file from
  * @cancellable: a GCancellable or %NULL
  * @error: a GError or %NULL
@@ -248,7 +248,7 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 
 /**
  * g_vfs_gdata_file_new_from_gdata:
- * @gdata: the gdata backend this file is to be used on
+ * @backend: the gdata backend this file is to be used on
  * @gdata_entry: gdata entry to create the file from
  * @error: a #GError or %NULL
  *
@@ -265,7 +265,6 @@ g_vfs_gdata_file_new_from_gdata (GVfsBackendGdocs *backend, GDataEntry *gdata_en
 	g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
 	g_return_val_if_fail (GDATA_IS_ENTRY (gdata_entry), NULL);
 
-	/*TODO handle picass albums*/
 	if (GDATA_IS_DOCUMENTS_ENTRY (gdata_entry))
 		gvfs_path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (gdata_entry));
 	else

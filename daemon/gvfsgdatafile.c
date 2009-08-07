@@ -57,6 +57,15 @@ enum {
 G_DEFINE_TYPE (GVfsGDataFile, g_vfs_gdata_file, G_TYPE_OBJECT)
 #define G_VFS_GDATA_FILE_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), G_VFS_TYPE_GDATA_FILE, GVfsGDataFilePrivate))
 
+static void
+convert_slashes (char *str)
+{
+  char *s;
+
+  while ((s = strchr (str, '/')) != NULL)
+    *s = '\\';
+}
+
 /**
  * g_vfs_gdata_file_get_document_id_from_gvfs
  * Gets the id of the document passed as @path.
@@ -187,6 +196,7 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 	g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
 	g_return_val_if_fail (gvfs_path != NULL, NULL);
 
+	g_print ("New from GVFS: %s\n", gvfs_path);
 	entry_id = g_vfs_gdata_file_get_document_id_from_gvfs (gvfs_path);
 	if (g_strcmp0 (entry_id, "/") == 0)
 	{
@@ -195,6 +205,7 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 							 "gdata-entry", NULL,
 							 NULL);
 	}
+	g_print ("New from GVFS entry_id: %s\n", entry_id);
 
 	/* if the GHashTable which make the link between an entry-id and a type is empty, we build it*/
 	if (g_hash_table_size (backend->entries_type) == 0)
@@ -332,6 +343,8 @@ g_vfs_gdata_file_new_parent_from_gvfs (GVfsBackendGdocs *backend, const gchar *g
 	parent_entry_pseudo_path = g_strconcat ("/", parent_entry_id, NULL);
 	g_free (parent_entry_id);
 
+	g_print ("Parent entry pseudo_path: %s\n", parent_entry_pseudo_path);
+
 	parent_folder =  g_vfs_gdata_file_new_folder_from_gvfs (backend, parent_entry_pseudo_path, cancellable, error);
 	g_free (parent_entry_pseudo_path);
 
@@ -412,6 +425,7 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 		}
 
 		display_name = g_string_new (gdata_entry_get_title (file->priv->gdata_entry));
+		convert_slashes (display_name->str);
 		if (*display_name->str == '.')
 			g_file_info_set_is_hidden (info, TRUE);
 		if (g_strstr_len (display_name->str, strlen (display_name), "\357\277\275") != NULL)
@@ -419,11 +433,20 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 		else
 		{
 			if (GDATA_IS_DOCUMENTS_SPREADSHEET (file->priv->gdata_entry))
-				g_string_append (display_name, ".ods");
+			{
+				if (!g_str_has_suffix (display_name->str, ".ods"))
+					g_string_append (display_name, ".ods");
+			}
 			else if (GDATA_IS_DOCUMENTS_TEXT (file->priv->gdata_entry))
-				g_string_append (display_name, ".odt");
+			{
+				if (!g_str_has_suffix (display_name->str, ".odt"))
+					g_string_append (display_name, ".odt");
+			}
 			else if (GDATA_IS_DOCUMENTS_PRESENTATION (file->priv->gdata_entry))
-				g_string_append (display_name, ".ppt");
+			{
+				if (!g_str_has_suffix (display_name->str, ".ppt"))
+					g_string_append (display_name, ".ppt");
+			}
 		}
 		g_file_info_set_display_name (info, display_name->str);
 

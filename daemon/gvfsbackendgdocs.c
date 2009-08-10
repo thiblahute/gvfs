@@ -622,14 +622,14 @@ do_delete (GVfsBackend *backend, GVfsJobDelete *job, const char *filename)
 }
 
 static void
-do_query_info_on_write (GVfsBackend *backend, GVfsJobQueryInfoWrite *job, GVfsBackendHandle _handle, GFileInfo *info, GFileAttributeMatcher *matcher)
+do_query_info (GVfsBackend *backend, GVfsJobQueryInfo *job, const char *filename, GFileQueryInfoFlags flags, GFileInfo *info, GFileAttributeMatcher *matcher)
 {
-	/* FIXME*/
-	GVfsGDataFile	*file;
+	GVfsGDataFile			*file;
 
-	GError			*error = NULL;
+	GError					*error = NULL;
+	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
 
-	file = g_vfs_gdata_file_new_from_gdata (G_VFS_BACKEND_GDOCS (backend), GDATA_ENTRY (_handle), &error);
+	file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -640,17 +640,19 @@ do_query_info_on_write (GVfsBackend *backend, GVfsJobQueryInfoWrite *job, GVfsBa
 	}
 
 	info = g_vfs_gdata_file_get_info (file, info, matcher, &error);
-
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
 		if (file != NULL)
 			g_object_unref (file);
+		if (info != NULL)
+			g_object_unref (info);
 		return;
 	}
 
-	g_object_unref (file);
+	g_print ("File Info: %s", g_file_info_get_content_type (info));
+
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
@@ -800,20 +802,6 @@ do_pull (GVfsBackend *backend, GVfsJobPull *job, const char *source, const char 
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
-typedef struct {
-	GOutputStream *output_stream;
-	GVfsGDataFile *file;
-} GDocsWriteHandle;
-
-void gdocs_write_handle_free (GDocsWriteHandle *handle)
-{
-	if (handle->file != NULL)
-		g_object_unref (handle->file);
-	if (handle->output_stream != NULL)
-		g_object_unref (handle->output_stream);
-	g_free (handle);
-}
-
 static void
 do_create (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filename, GFileCreateFlags flags)
 {
@@ -826,7 +814,6 @@ do_create (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filename,
 	GOutputStream		*output_stream;
 
 	GError				*error = NULL;
-	GDocsWriteHandle	*handle = NULL;
 	GDataDocumentsEntry *entry = NULL;
 
 	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
@@ -862,15 +849,10 @@ do_create (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filename,
 
 	output_stream = gdata_upload_stream_new (service, SOUP_METHOD_POST, upload_uri, NULL, title, content_type);
 	g_free (upload_uri);
-	
-	handle = g_new0 (GDocsWriteHandle, 1);
-	handle->file = NULL;
-	handle->output_stream = output_stream;
-
 	g_object_unref (file_info);
 
 	g_vfs_job_open_for_write_set_can_seek (job, FALSE);
-	g_vfs_job_open_for_write_set_handle (job, handle);
+	g_vfs_job_open_for_write_set_handle (job, output_stream);
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
@@ -881,7 +863,6 @@ do_append_to (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filena
 	gchar					*upload_uri;
 	const gchar				*content_type;
 	GDataEntry				*entry, *slug;
-	GDocsWriteHandle		*handle;
 	GDataUploadStream		*output_stream;
 	GFile					*file ;
 	GVfsGDataFile			*gdata_file;
@@ -920,14 +901,10 @@ do_append_to (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filena
 
 	output_stream = gdata_upload_stream_new (service, SOUP_METHOD_PUT, gdata_link_get_uri (upload_uri), entry, slug, content_type);
 
-	handle = g_new0 (GDocsWriteHandle, 1);
-	handle->file = gdata_file;
-	handle->output_stream = output_stream;
-
 	g_object_unref (file_info);
 
 	g_vfs_job_open_for_write_set_can_seek (job, FALSE);
-	g_vfs_job_open_for_write_set_handle (job, handle);
+	g_vfs_job_open_for_write_set_handle (job, output_stream);
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
@@ -937,9 +914,8 @@ do_write (GVfsBackend *backend, GVfsJobWrite *job,  GVfsBackendHandle _handle, c
 	gssize				n_bytes;
 
 	GError				*error = NULL;
-	GDocsWriteHandle	*handle = _handle;
 	GCancellable		*cancellable = G_VFS_JOB (job)->cancellable;
-	GDataUploadStream	*output_stream = handle->output_stream;
+	GDataUploadStream	*output_stream = G_OUTPUT_STREAM (_handle);
 
 	n_bytes = g_output_stream_write (output_stream, buffer, buffer_size, cancellable, &error);
 	if (error != NULL)
@@ -958,9 +934,8 @@ do_write (GVfsBackend *backend, GVfsJobWrite *job,  GVfsBackendHandle _handle, c
 static void
 do_close_write (GVfsBackend *backend, GVfsJobCloseWrite *job, GVfsBackendHandle _handle)
 {
-	/*TODO*/
-	GDocsWriteHandle *handle = _handle;
-	gdocs_write_handle_free (handle);
+	g_object_unref (_handle);
+	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
 static void
@@ -987,6 +962,7 @@ g_vfs_backend_gdocs_class_init (GVfsBackendGdocsClass *klass)
 	backend_class->close_read = do_close_read;
 	backend_class->close_write = do_close_write;
 	backend_class->write = do_write;
+	backend_class->query_info = do_query_info;
 /*	backend_class->create = do_create;*/
 
 }

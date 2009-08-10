@@ -151,23 +151,13 @@ g_vfs_gdata_file_new_folder_from_gvfs (GVfsBackendGdocs *backend, const gchar *g
 		return NULL;
 	}
 
-	if (GDATA_IS_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (folder)))
-		g_print ("Entry: ");
-	if (GDATA_IS_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (folder)))
-		g_print ("FOLDER!\n");
-	if (GDATA_IS_DOCUMENTS_PRESENTATION (g_vfs_gdata_file_get_gdata_entry (folder)))
-		g_print ("PRESENTATIOn!\n");
-	if (GDATA_IS_DOCUMENTS_SPREADSHEET (g_vfs_gdata_file_get_gdata_entry (folder)))
-		g_print ("SPREADSHEET!\n");
-	if (GDATA_IS_DOCUMENTS_TEXT (g_vfs_gdata_file_get_gdata_entry (folder)))
-		g_print ("TEXT!\n");
-
-	/*if (!g_vfs_gdata_file_is_folder (folder))
+	if (!g_vfs_gdata_file_is_folder (folder))
 	{
 		g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_DIRECTORY, _("%s is not a directory"), gvfs_path);
 		g_object_unref (folder);
 		return NULL;
-	}*/
+	}
+
 	return folder;
 }
 /**
@@ -409,7 +399,9 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 	GString *display_name;
 	const gchar *filename;
 
-	info = g_file_info_new();
+	if (!G_IS_FILE_INFO (info))
+		info = g_file_info_new();
+
 	if (file->priv->gdata_entry != NULL || g_strcmp0 (file->priv->gvfs_path, "/") == 0)
 	{
 		if (GDATA_IS_DOCUMENTS_ENTRY (file->priv->gdata_entry))
@@ -424,14 +416,52 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 			return NULL;
 		}
 
+		/* We set the content file type and file size if necessary*/
+		if (g_vfs_gdata_file_is_folder (file))
+		{
+			g_file_info_set_file_type (info, G_FILE_TYPE_DIRECTORY);
+
+			content_type = g_strdup ("inode/directory");
+			if (g_strcmp0 (file->priv->gvfs_path, "/") == 0)
+				icon = g_themed_icon_new ("folder-remote");
+			else
+				icon = g_themed_icon_new ("folder");
+		}
+		else
+		{ 
+			g_file_info_set_file_type (info, G_FILE_TYPE_REGULAR);
+
+			/*Create the content type*/
+			if (GDATA_IS_DOCUMENTS_SPREADSHEET (file->priv->gdata_entry))
+				content_type = g_strdup ("application/x-vnd.oasis.opendocument.spreadsheet");
+			else if (GDATA_IS_DOCUMENTS_TEXT (file->priv->gdata_entry))
+				content_type = g_strdup ("application/vnd.oasis.opendocument.text");
+			else if (GDATA_IS_DOCUMENTS_PRESENTATION (file->priv->gdata_entry))
+				content_type = g_strdup ("application/vnd.ms-powerpoint");
+			else
+				content_type = g_content_type_guess (display_name->str, NULL, 0, NULL);
+
+			/*We set the size as the maximum size we can upload on the server*/
+			g_file_info_set_size (info, 1000);
+		}
+
+		g_file_info_set_content_type (info, content_type);
+
+		if (g_vfs_gdata_file_is_root (file))
+			return;
+
+		/* Set the display name corresponding to the GDataEntry::title parameter*/
 		display_name = g_string_new (gdata_entry_get_title (file->priv->gdata_entry));
+		/*We can't name a file with Slashes*/
 		convert_slashes (display_name->str);
 		if (*display_name->str == '.')
 			g_file_info_set_is_hidden (info, TRUE);
+
 		if (g_strstr_len (display_name->str, strlen (display_name), "\357\277\275") != NULL)
 			g_string_append (display_name, _(" (invalid encoding)"));
 		else
 		{
+			/*Set the extensions*/
 			if (GDATA_IS_DOCUMENTS_SPREADSHEET (file->priv->gdata_entry))
 			{
 				if (!g_str_has_suffix (display_name->str, ".ods"))
@@ -450,55 +480,23 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 		}
 		g_file_info_set_display_name (info, display_name->str);
 
-		if (g_vfs_gdata_file_is_folder (file))
-			file_type = G_FILE_TYPE_DIRECTORY;
-		else
-			file_type = G_FILE_TYPE_REGULAR;
-
-		g_file_info_set_file_type (info, file_type);
-		g_file_info_set_size (info, 1000);
-
-		if (g_file_attribute_matcher_matches (matcher,
-					G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE) ||
-				g_file_attribute_matcher_matches (matcher,
-					G_FILE_ATTRIBUTE_STANDARD_ICON))
+		if (g_file_attribute_matcher_matches (matcher, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE) ||
+			g_file_attribute_matcher_matches (matcher, G_FILE_ATTRIBUTE_STANDARD_ICON))
 		{
 			icon = NULL;
-			content_type = NULL;
-
-			if (g_vfs_gdata_file_is_folder (file))
-			{
-				content_type = g_strdup ("inode/directory");
-				if (g_strcmp0 (file->priv->gvfs_path, "/") == 0)
-					icon = g_themed_icon_new ("folder-remote");
-				else
-					icon = g_themed_icon_new ("folder");
-			}
-			else
-			{ /*Create the content type*/
-				if (GDATA_IS_DOCUMENTS_SPREADSHEET (file->priv->gdata_entry))
-					content_type = g_strdup ("application/x-vnd.oasis.opendocument.spreadsheet");
-				else if (GDATA_IS_DOCUMENTS_TEXT (file->priv->gdata_entry))
-					content_type = g_strdup ("application/vnd.oasis.opendocument.text");
-				else if (GDATA_IS_DOCUMENTS_PRESENTATION (file->priv->gdata_entry))
-					content_type = g_strdup ("application/vnd.ms-powerpoint");
-				else
-					content_type = g_content_type_guess (display_name->str, NULL, 0, NULL);
-			}
 
 			if (content_type)
 			{
 				icon = g_content_type_get_icon (content_type);
 				g_file_info_set_content_type (info, content_type);
-				g_free (content_type);
 			}
-
 			if (icon == NULL)
 				icon = g_themed_icon_new ("text-x-generic");
 
 			g_file_info_set_icon (info, icon);
 			g_object_unref (icon);
 		}
+		g_free (content_type);
 
 		if (g_file_attribute_matcher_matches (matcher, G_FILE_ATTRIBUTE_ETAG_VALUE))
 		{

@@ -87,7 +87,7 @@ g_vfs_backend_gdocs_init (GVfsBackendGdocs *backend)
 
 	/* Gnome proxy configuration is handle by libgdata*/
 
-	/* Logging */
+	/* Loggin */
 	debug = g_getenv ("GVFS_GDOCS_DEBUG");
 	if (debug)
 	{
@@ -134,7 +134,7 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 {
 	GVfsBackendGdocs *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 	GMountSpec *gdocs_mount_spec;
-	gchar *username, *dummy_host=NULL, *ask_user, *ask_password, *prompt=NULL, *display_name;
+	gchar *username = NULL, *dummy_host=NULL, *ask_user, *ask_password, *prompt=NULL, *display_name;
 	gboolean aborted, retval, save_password=FALSE;
 	GPasswordSave password_save = G_PASSWORD_SAVE_NEVER;
 	GAskPasswordFlags flags;
@@ -418,6 +418,8 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 			g_object_unref (documents_feed);
 		return;
 	}
+	if (documents_feed == NULL)
+		g_print ("HEIN??");
 
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 	for (i = gdata_feed_get_entries (GDATA_FEED (documents_feed)); i != NULL; i = i->next)

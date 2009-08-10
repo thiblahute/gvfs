@@ -81,18 +81,10 @@ g_vfs_backend_gdocs_dispose (GObject *object)
 static void
 g_vfs_backend_gdocs_init (GVfsBackendGdocs *backend)
 {
-	const char         *debug;
 	backend->service =  gdata_documents_service_new (CLIENT_ID);
 	backend->entries_type = g_hash_table_new (g_str_hash, g_str_equal);
 
 	/* Gnome proxy configuration is handle by libgdata*/
-
-	/* Loggin */
-	debug = g_getenv ("GVFS_GDOCS_DEBUG");
-	if (debug)
-	{
-		/*TODO*/
-	}
 }
 
 /* ************************************************************************* */
@@ -100,11 +92,14 @@ g_vfs_backend_gdocs_init (GVfsBackendGdocs *backend)
 void
 g_vfs_backend_gdocs_rebuild_entries_type (GVfsBackendGdocs *backend, GCancellable *cancellable, GError **error)
 {
-	GDataDocumentsQuery *query;
-	GDataDocumentsFeed *tmp_feed;
-	GList *entries_list = NULL, *i;
-	GDataDocumentsService *service = backend->service;
+	GList					*entries_list, *i;
+	GDataDocumentsQuery		*query;
+	GDataDocumentsFeed		*tmp_feed;
 
+	GDataDocumentsService	*service = backend->service;
+	
+	entries_list = NULL;
+	
 	/*Get all entries (as feed) on the server*/
 	query = gdata_documents_query_new (NULL);
 	gdata_documents_query_set_show_folders (query, TRUE);
@@ -132,14 +127,20 @@ g_vfs_backend_gdocs_rebuild_entries_type (GVfsBackendGdocs *backend, GCancellabl
 static void
 do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMountSource *mount_source,  gboolean is_automount)
 {
-	GVfsBackendGdocs *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
-	GMountSpec *gdocs_mount_spec;
-	gchar *username = NULL, *dummy_host=NULL, *ask_user, *ask_password, *prompt=NULL, *display_name;
-	gboolean aborted, retval, save_password=FALSE;
-	GPasswordSave password_save = G_PASSWORD_SAVE_NEVER;
-	GAskPasswordFlags flags;
-	GError *error;
-	guint mount_try;
+	gchar				*username, *dummy_host, *ask_user, *ask_password, *prompt, *display_name;
+	gboolean			aborted, retval, save_password;
+	GMountSpec			*gdocs_mount_spec;
+	GAskPasswordFlags	flags;
+	guint				mount_try;
+
+	GPasswordSave		password_save = G_PASSWORD_SAVE_NEVER;
+	GVfsBackendGdocs	*gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
+	GError				*error = NULL;
+	
+	prompt = NULL;
+	prompt = NULL;
+	dummy_host = NULL;
+	save_password = FALSE;	
 
 	/*Get usename*/
 	username = g_strdup (g_mount_spec_get (mount_spec, "user"));
@@ -173,7 +174,7 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 				return;
 			}
 			save_password = TRUE;
-			ask_user = username;
+			ask_user = g_strdup (username);
 			g_free (prompt);
 		}
 	}
@@ -272,31 +273,35 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 	}
 
 	g_free (ask_user);
-	//g_free (username);
+	g_free (username);
 	g_free (ask_password);
 
 	if (retval == FALSE)
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 	else
 	{
-		g_print ("===Connected\n");
+		g_debug ("===Connected\n");
 		g_vfs_job_succeeded (G_VFS_JOB (job));
 	}
 }
 
-	void
+void
 do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char *destination, GFileCopyFlags flags,
 		GFileProgressCallback progress_callback, gpointer progress_callback_data)
 {
-	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
-	GVfsGDataFile *source_file = NULL, *destination_folder = NULL;
-	GDataDocumentsEntry *new_entry;
-	GError *error = NULL;
-	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
+	GDataDocumentsEntry	*new_entry;
+	GVfsGDataFile		*source_file, *destination_folder;
+
+	GError					*error = NULL;
+	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
+	GDataDocumentsService	*service = G_VFS_BACKEND_GDOCS (backend)->service;
+
+	source_file = NULL;
+	destination_folder = NULL;
 
 	if (flags & G_FILE_COPY_BACKUP)
 	{
-		/* FIXME: implement? */
+		/* TODO, Implement it*/ 
 		g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_CANT_CREATE_BACKUP, _("backups not supported yet"));
 		return;
 	}
@@ -306,7 +311,6 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 	if (error != NULL)
 	{
 
-		g_print ("Error making GVfsGDataFile\n");
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
 		if (source_file != NULL)
@@ -314,14 +318,12 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 		return;
 	}
 
-	g_print ("\n\nDestination: %s\n", destination);
 	if (g_strcmp0 (destination, "/") != 0)
 	{
 		destination_folder = g_vfs_gdata_file_new_folder_from_gvfs (G_VFS_BACKEND_GDOCS (backend), destination, cancellable, &error);
 
 		if (error != NULL)
 		{
-			g_print ("Error making GVfsGDataFile::destination_folder\n");
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 			g_error_free (error);
 			if (destination_folder != NULL)
@@ -331,9 +333,9 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 
 		/*Move the document on the server*/
 		new_entry = gdata_documents_service_move_document_to_folder (service,
-				GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_file)),
-				GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (destination_folder)),
-				cancellable, &error);
+																	 GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_file)),
+																	 GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (destination_folder)),
+																	 cancellable, &error);
 		if (error != NULL)
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -365,9 +367,9 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 			return;
 		}
 		new_entry = gdata_documents_service_remove_document_from_folder (service,
-				GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_file)),
-				GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (destination_folder)),
-				cancellable, &error);
+																		 GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_file)),
+																		 GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (destination_folder)),
+														 				 cancellable, &error);
 		if (error != NULL)
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -381,33 +383,33 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 	}
 
 	g_vfs_job_succeeded (G_VFS_JOB (job));
-
 }
 
 static void
 do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, GFileAttributeMatcher *matcher,
-		GFileQueryInfoFlags query_flags)
+			  GFileQueryInfoFlags query_flags)
 {
-	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
-	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
-	GDataDocumentsFeed *documents_feed;
-	GDataDocumentsQuery *query;
-	GError *error = NULL;
-	GList *i; /*GDataDocumentsEntry*/
-	GFileInfo *info;
-	gchar *folder_id = g_vfs_gdata_file_get_document_id_from_gvfs (dirname);
+	gchar					*folder_id ;
+	GList					*i; /*GDataDocumentsEntry*/
+	GFileInfo				*info;
+	GDataDocumentsFeed		*documents_feed;
+	GDataDocumentsQuery		*query ;
 
+	GError					*error = NULL;
+	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
+	GDataDocumentsService	*service = G_VFS_BACKEND_GDOCS (backend)->service;
+
+	/*Get documents properties*/
 	query = gdata_documents_query_new (NULL);
+	folder_id = g_vfs_gdata_file_get_document_id_from_gvfs (dirname);
 	if (strcmp (dirname, "/") != 0)
 	{
 		/*Sets the query folder id*/
 		gdata_documents_query_set_folder_id (query, folder_id);
-		g_print ("Folder ID: %s", folder_id);
+		g_debug ("Folder ID: %s", folder_id);
 	}
 	gdata_documents_query_set_show_folders (query, TRUE);
-
 	documents_feed = gdata_documents_service_query_documents (service, query, cancellable, NULL, NULL, &error);
-	g_print ("Folder ID: %s", folder_id);
 	g_object_unref (query);
 	if (error != NULL)
 	{
@@ -418,43 +420,45 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 			g_object_unref (documents_feed);
 		return;
 	}
-	if (documents_feed == NULL)
-		g_print ("HEIN??");
 
 	g_vfs_job_succeeded (G_VFS_JOB (job));
+
+	/*List documents*/
 	for (i = gdata_feed_get_entries (GDATA_FEED (documents_feed)); i != NULL; i = i->next)
 	{
-		info = NULL;
 		gchar *path, *parent_id;
 
+		info = NULL;
 		path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (i->data));
 		parent_id = g_vfs_gdata_file_get_parent_id_from_gvfs (path);
 
-		g_print ("Path %s Folder ID %s, Parents ID %s\n", path, folder_id, parent_id);
 		/*We check that the file is in the selected folder (not in a child of it)*/
 		if (g_strcmp0 (folder_id, parent_id) == 0)
 		{
 			GVfsGDataFile *file = g_vfs_gdata_file_new_from_gdata (G_VFS_BACKEND_GDOCS (backend), GDATA_ENTRY (i->data), &error);
-
-
 			if (error != NULL)
 			{
-				g_print ("error getting the file");
+				g_free (path);
+				g_free (parent_id);
+				if (file != NULL)
+					g_object_unref (file);
 				g_clear_error (&error);
+				continue;
 			}
-			else
+
+			info = g_vfs_gdata_file_get_info (file, info, matcher, &error);
+			if (error != NULL)
 			{
-				info = g_vfs_gdata_file_get_info (file, info, matcher, &error);
-				if (error != NULL)
-				{
-					g_print ("error getting the infos");
-					g_clear_error (&error);
-				}
-				else
-				{
-					g_vfs_job_enumerate_add_info (job, info);
-				}
+				g_free (path);
+				g_free (parent_id);
+				g_clear_error (&error);
+				if (file != NULL)
+					g_object_unref (file);
+				continue;
 			}
+				
+			g_vfs_job_enumerate_add_info (job, info);
+			g_object_unref (file);
 		}
 		g_free (path);
 		g_free (parent_id);
@@ -467,13 +471,15 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 static void
 do_make_directory (GVfsBackend *backend, GVfsJobMakeDirectory *job, const char *filename)
 {
-	GError *error = NULL;
-	GDataCategory *folder_category;
-	GDataDocumentsFolder *folder, *new_folder;
-	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
-	gchar *title = g_vfs_gdata_file_get_document_id_from_gvfs (filename);
-	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
+	gchar					*title;
+	GDataCategory			*folder_category;
+	GDataDocumentsFolder	*folder, *new_folder;
 
+	GError					*error = NULL;
+	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
+	GDataDocumentsService	*service = G_VFS_BACKEND_GDOCS (backend)->service;
+
+	title = g_vfs_gdata_file_get_document_id_from_gvfs (filename);
 	if (g_strcmp0 (title, "/") == 0)
 	{
 		g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, _("Can't create a root directory"));
@@ -484,8 +490,8 @@ do_make_directory (GVfsBackend *backend, GVfsJobMakeDirectory *job, const char *
 
 	folder = gdata_documents_folder_new (NULL);
 	folder_category = gdata_category_new ("http://schemas.google.com/docs/2007#folder", "http://schemas.google.com/g/2005#kind", "folder");
-	gdata_entry_set_title (GDATA_ENTRY (folder), title);
 	gdata_entry_add_category (GDATA_ENTRY (folder), folder_category);
+	gdata_entry_set_title (GDATA_ENTRY (folder), title);
 	g_free (title);
 
 	new_folder = GDATA_DOCUMENTS_FOLDER (gdata_documents_service_upload_document (service, GDATA_DOCUMENTS_ENTRY (folder), NULL, NULL, cancellable, &error));
@@ -493,38 +499,49 @@ do_make_directory (GVfsBackend *backend, GVfsJobMakeDirectory *job, const char *
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
+		g_object_unref (folder);
+		g_object_unref (folder_category);
+		if (new_folder != NULL)
+			g_object_unref (new_folder);
 		return;
 	}
+
+	g_object_unref (folder);
+	g_object_unref (new_folder);
+	g_object_unref (folder_category);
 
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
 static void
-do_open_for_read (GVfsBackend *backend,
-		GVfsJobOpenForRead *job,
-		const char *filename)
+do_open_for_read (GVfsBackend *backend, GVfsJobOpenForRead *job, const char *filename)
 {
-	gchar *uri;
-	SoupMessage *msg;
-	GDataInputStream *stream;
-	GError *error = NULL;
-	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
-	GVfsBackendGdocs *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
-	GVfsGDataFile *file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
+	gchar				*uri;
+	SoupMessage			*msg;
+	GVfsGDataFile		*file;
+	GOutputStream		*stream;
+
+	GError				*error = NULL;
+	GCancellable		*cancellable = G_VFS_JOB (job)->cancellable;
+	GVfsBackendGdocs	*gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
+
+	file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
 	if (error != NULL)
 	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
 		if (file != NULL)
 			g_object_unref (file);
-		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		return;
 	}
 
 	uri = g_vfs_gdata_file_get_download_uri (file, cancellable, &error);
 	if (error != NULL)
 	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
 		if (file != NULL)
 			g_object_unref (file);
-		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_free (uri);
 		return;
 	}
@@ -542,13 +559,13 @@ do_open_for_read (GVfsBackend *backend,
 static void
 do_read (GVfsBackend *backend, GVfsJobRead *job, GVfsBackendHandle handle, char *buffer, gsize bytes_requested)
 {
-	gssize n_bytes;
-	GError *error = NULL;
-	GDataInputStream *stream = G_INPUT_STREAM (handle);
-	GVfsBackendGdocs *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
+	gssize				n_bytes;
+
+	GError				*error = NULL;
+	GOutputStream		*stream = G_INPUT_STREAM (handle);
+	GVfsBackendGdocs	*gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 
 	n_bytes = g_input_stream_read (stream, buffer, bytes_requested, G_VFS_JOB (job)->cancellable, &error);
-
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -562,56 +579,57 @@ do_read (GVfsBackend *backend, GVfsJobRead *job, GVfsBackendHandle handle, char 
 }
 
 static void
-do_close_read (GVfsBackend *     backend,
-		GVfsJobCloseRead *job,
-		GVfsBackendHandle handle)
+do_close_read (GVfsBackend *backend, GVfsJobCloseRead *job, GVfsBackendHandle handle)
 {
 	g_object_unref (job);
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
 static void
-do_delete (GVfsBackend *backend,
-		GVfsJobDelete *job,
-		const char *filename)
+do_delete (GVfsBackend *backend, GVfsJobDelete *job, const char *filename)
 {
-	GError *error = NULL;
-	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
-	GDataService *service = G_VFS_BACKEND_GDOCS (backend)->service;
+	GVfsGDataFile	*file;
 
-	GVfsGDataFile *file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
+	GError			*error = NULL;
+	GCancellable	*cancellable = G_VFS_JOB (job)->cancellable;
+	GDataService	*service = G_VFS_BACKEND_GDOCS (backend)->service;
 
-	if (error != NULL)
-	{
-		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-		return;
-	}
-
-	g_print ("Delete entry...");
-	gdata_service_delete_entry (service,
-			GDATA_ENTRY (g_vfs_gdata_file_get_gdata_entry (file)),
-			cancellable, &error);
+		
+	file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
+		if (file != NULL)
+			g_object_unref (file);
 		return;
 	}
-	g_print ("%s :deleted\n", gdata_entry_get_title (g_vfs_gdata_file_get_gdata_entry (file)));
+
+	gdata_service_delete_entry (service,
+								GDATA_ENTRY (g_vfs_gdata_file_get_gdata_entry (file)),
+								cancellable, &error);
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		if (file != NULL)
+			g_object_unref (file);
+		return;
+	}
+	g_debug ("%s :deleted\n", gdata_entry_get_title (g_vfs_gdata_file_get_gdata_entry (file)));
 
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
 static void
-do_query_info_on_write (GVfsBackend *backend,
-		GVfsJobQueryInfoWrite *job,
-		GVfsBackendHandle _handle,
-		GFileInfo *info,
-		GFileAttributeMatcher *matcher)
+do_query_info_on_write (GVfsBackend *backend, GVfsJobQueryInfoWrite *job, GVfsBackendHandle _handle, GFileInfo *info, GFileAttributeMatcher *matcher)
 {
-	GError *error = NULL;
+	/* FIXME*/
+	GVfsGDataFile	*file;
 
-	GVfsGDataFile *file = g_vfs_gdata_file_new_from_gdata (G_VFS_BACKEND_GDOCS (backend), GDATA_ENTRY (_handle), &error);
+	GError			*error = NULL;
+
+	file = g_vfs_gdata_file_new_from_gdata (G_VFS_BACKEND_GDOCS (backend), GDATA_ENTRY (_handle), &error);
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -623,31 +641,29 @@ do_query_info_on_write (GVfsBackend *backend,
 
 	info = g_vfs_gdata_file_get_info (file, info, matcher, &error);
 
-	if (error == NULL)
-	{
-		g_vfs_job_succeeded (G_VFS_JOB (job));
-		g_object_unref (file);
-	}
-	else
+	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
 		if (file != NULL)
 			g_object_unref (file);
+		return;
 	}
+
+	g_object_unref (file);
+	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
 static void
-do_replace (GVfsBackend *backend,
-		GVfsJobOpenForWrite *job,
-		const char *filename,
-		const char *etag,
-		gboolean make_backup,
-		GFileCreateFlags flags)
+do_replace (GVfsBackend *backend, GVfsJobOpenForWrite *job,	const char *filename, const char *etag,	gboolean make_backup, GFileCreateFlags flags)
 {
-	GError *error = NULL;
-	GVfsGDataFile *file;
-	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
+	GFile					*local_file;
+	GVfsGDataFile			*file;
+	GDataDocumentsEntry		*new_entry;
+
+	GError					*error = NULL;
+	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
+	GDataDocumentsService	*service = G_VFS_BACKEND_GDOCS (backend)->service;
 
 	if (make_backup)
 	{
@@ -664,30 +680,41 @@ do_replace (GVfsBackend *backend,
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		if (file != NULL)
+			g_object_unref (file);
 		return;
 	}
-	if (g_strcmp0 (etag, gdata_entry_get_etag (g_vfs_gdata_file_get_gdata_entry (file))) != 0)
+
+	local_file = g_file_new_for_path (filename);
+	new_entry = gdata_documents_service_update_document (service, GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (file)),
+														 local_file, cancellable, &error);
+	if (error != NULL)
 	{
-		g_set_error_literal (&error,
-				G_IO_ERROR,
-				G_IO_ERROR_WRONG_ETAG,
-				_("The file was externally modified"));
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		if (file != NULL)
+			g_object_unref (file);
+		g_object_unref (local_file);
+		return;
 	}
-	/*TODO*/
 }
 
 static void
 do_push (GVfsBackend *backend, GVfsJobPull *job, const char *destination, const char *local_path, GFileCopyFlags flags,
-		gboolean remove_source, GFileProgressCallback progress_callback, gpointer progress_callback_data)
+		 gboolean remove_source, GFileProgressCallback progress_callback, gpointer progress_callback_data)
 {
-	GError *error = NULL;
-	gchar *destination_filename;
-	GDataDocumentsFolder *folder_entry = NULL; 
-	GDataDocumentsEntry *entry = NULL, *new_entry;
-	GFile *local_file = g_file_new_for_path (local_path);
-	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
-	GDataDocumentsService *service = (G_VFS_BACKEND_GDOCS (backend)->service);
-	GVfsGDataFile *destination_folder = g_vfs_gdata_file_new_parent_from_gvfs (G_VFS_BACKEND_GDOCS (backend), destination, cancellable, &error);
+	gchar					*destination_filename;
+	GDataDocumentsEntry		*entry, *new_entry;
+	GFile					*local_file;
+	GVfsGDataFile			*destination_folder;
+
+	GError					*error = NULL;
+	GDataDocumentsFolder	*folder_entry = NULL; 
+	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
+	GDataDocumentsService	*service = (G_VFS_BACKEND_GDOCS (backend)->service);
+
+	destination_folder = g_vfs_gdata_file_new_parent_from_gvfs (G_VFS_BACKEND_GDOCS (backend), destination, cancellable, &error);
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -706,31 +733,28 @@ do_push (GVfsBackend *backend, GVfsJobPull *job, const char *destination, const 
 	else
 		folder_entry = g_vfs_gdata_file_get_gdata_entry (destination_folder),
 
-	destination_filename = g_vfs_gdata_file_get_document_id_from_gvfs (destination);
 	entry = gdata_documents_spreadsheet_new (NULL);
+	destination_filename = g_vfs_gdata_file_get_document_id_from_gvfs (destination);
 	gdata_entry_set_title (GDATA_ENTRY (entry), destination_filename);
 	g_free (destination_filename);
 
+	local_file = g_file_new_for_path (local_path);
 	new_entry = gdata_documents_service_upload_document (GDATA_DOCUMENTS_SERVICE (service), entry, local_file,
 														 folder_entry, cancellable, &error);
+	g_object_unref (entry);
+	if (destination_folder != NULL)
+		g_object_unref (destination_folder);
+	g_object_unref (local_file);
+	if (new_entry != NULL)
+		g_object_unref (new_entry);
+
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (entry != NULL)
-			g_object_unref (entry);
-		if (destination_folder != NULL)
-			g_object_unref (destination_folder);
-		g_object_unref (local_file);
 		return;
 	}
 
-	if (entry != NULL)
-		g_object_unref (entry);
-	if (destination_folder != NULL)
-		g_object_unref (destination_folder);
-
-	g_object_unref (local_file);
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
@@ -738,13 +762,16 @@ static void
 do_pull (GVfsBackend *backend, GVfsJobPull *job, const char *source, const char *local_path, GFileCopyFlags flags,
 		gboolean remove_source, GFileProgressCallback progress_callback, gpointer progress_callback_data)
 {
-	GError *error = NULL;
-	GFile *new_file = NULL;
-	gchar *content_type = NULL;
-	gboolean replace_if_exists = FALSE;
-	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
-	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
-	GVfsGDataFile *file =  g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), source, cancellable, &error);
+	GVfsGDataFile			*file;
+	GFile					*new_file;
+
+	GError					*error = NULL;
+	gchar					*content_type = NULL;
+	gboolean				replace_if_exists = FALSE;
+	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
+	GDataDocumentsService	*service = G_VFS_BACKEND_GDOCS (backend)->service;
+
+	file =  g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), source, cancellable, &error);
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -759,23 +786,22 @@ do_pull (GVfsBackend *backend, GVfsJobPull *job, const char *source, const char 
 
 	new_file = g_vfs_gdata_file_download_file (file, &content_type, local_path, replace_if_exists, TRUE, cancellable, &error);
 	g_object_unref (file);
+	if (new_file != NULL)
+		g_object_unref (new_file);
+
 	if (error != NULL)
 	{
 		g_print ("error downloading");
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (new_file != NULL)
-			g_object_unref (new_file);
 		return;
 	}
-	if (new_file != NULL)
-		g_object_unref (new_file);
 
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
 typedef struct {
-	GDataUploadStream *output_stream;
+	GOutputStream *output_stream;
 	GVfsGDataFile *file;
 } GDocsWriteHandle;
 
@@ -791,31 +817,51 @@ void gdocs_write_handle_free (GDocsWriteHandle *handle)
 static void
 do_create (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filename, GFileCreateFlags flags)
 {
-	GError *error = NULL;
-	GDataCategory *category;
-	GDocsWriteHandle *handle = NULL;
-	GDataUploadStream *output_stream = NULL;
+	const gchar			*title, *content_type;
+	gchar				*upload_uri;
+	GDataCategory		*category;
+	GFile				*file;
+	GFileInfo			*file_info;
+	GVfsGDataFile		*parent_folder;
+	GOutputStream		*output_stream;
+
+	GError				*error = NULL;
+	GDocsWriteHandle	*handle = NULL;
 	GDataDocumentsEntry *entry = NULL;
-	const gchar *title, *content_type;
-	gchar *upload_uri = NULL, *tmp = NULL, *folder_id = NULL;
-	GFile *file = g_file_new_for_path (filename);
+
 	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
 	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
-	GFileInfo *file_info =  g_file_query_info (file, "standard::display-name,standard::content-type", G_FILE_QUERY_INFO_NONE, NULL, &error);
+
+	file = g_file_new_for_path (filename);
+	file_info =  g_file_query_info (file, "standard::display-name,standard::content-type", G_FILE_QUERY_INFO_NONE, NULL, &error);
 	g_object_unref (file);
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		if (file_info != NULL)
+			g_object_unref (file_info);
+		return;
+	}
 
 	content_type = g_file_info_get_content_type (file_info);
 	title = g_file_info_get_display_name (file_info);
 
-
-	folder_id = g_vfs_gdata_file_get_parent_id_from_gvfs (filename);
-	if (folder_id != NULL)
-		tmp = upload_uri = g_strconcat ("http://docs.google.com/feeds/folders/private/full/folder%3A", folder_id, NULL);
-	else
-		upload_uri = "http://docs.google.com/feeds/documents/private/full";
+	parent_folder =g_vfs_gdata_file_new_parent_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		if (file_info != NULL)
+			g_object_unref (file_info);
+		if (parent_folder != NULL)
+			g_object_unref (parent_folder);
+		return;
+	}
+	upload_uri = gdata_documents_service_get_upload_uri (GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (parent_folder)));
 
 	output_stream = gdata_upload_stream_new (service, SOUP_METHOD_POST, upload_uri, NULL, title, content_type);
-	g_free (tmp);
+	g_free (upload_uri);
 	
 	handle = g_new0 (GDocsWriteHandle, 1);
 	handle->file = NULL;
@@ -831,27 +877,30 @@ do_create (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filename,
 static void
 do_append_to (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filename, GFileCreateFlags flags)
 {
-	GError *error = NULL;
-	GFileInfo *file_info;
-	gchar *slug, content_type;
-	GDataEntry *entry = NULL;
-	GDocsWriteHandle *handle = NULL;
-	GDataUploadStream *output_stream = NULL;
-	GFile *file = g_file_new_for_path (filename);
-	gchar *upload_uri = NULL, *tmp = NULL, *folder_id = NULL;
-	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
-	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
-	GVfsGDataFile *gdata_file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
+	GFileInfo				*file_info;
+	gchar					*upload_uri;
+	const gchar				*content_type;
+	GDataEntry				*entry, *slug;
+	GDocsWriteHandle		*handle;
+	GDataUploadStream		*output_stream;
+	GFile					*file ;
+	GVfsGDataFile			*gdata_file;
+		
+	GError					*error = NULL;
+	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
+	GDataDocumentsService	*service = G_VFS_BACKEND_GDOCS (backend)->service;
+
+	gdata_file	= g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		g_object_unref (file);
 		if (gdata_file != NULL)
 			g_object_unref (gdata_file);
 		return;
 	}
 
+	file = g_file_new_for_path (filename);
 	file_info =  g_file_query_info (file, "standard::display-name,standard::content-type", G_FILE_QUERY_INFO_NONE, NULL, &error);
 	g_object_unref (file);
 	if (error != NULL)
@@ -868,6 +917,7 @@ do_append_to (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filena
 
 	entry = GDATA_ENTRY (g_vfs_gdata_file_get_gdata_entry (gdata_file));
 	upload_uri = gdata_entry_look_up_link (GDATA_ENTRY (entry), GDATA_LINK_EDIT_MEDIA);
+
 	output_stream = gdata_upload_stream_new (service, SOUP_METHOD_PUT, gdata_link_get_uri (upload_uri), entry, slug, content_type);
 
 	handle = g_new0 (GDocsWriteHandle, 1);
@@ -884,11 +934,12 @@ do_append_to (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filena
 static void
 do_write (GVfsBackend *backend, GVfsJobWrite *job,  GVfsBackendHandle _handle, char *buffer, gsize buffer_size)
 {
-	gssize n_bytes;
-	GError *error = NULL;
-	GDocsWriteHandle *handle = _handle;
-	GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
-	GDataUploadStream *output_stream = handle->output_stream;
+	gssize				n_bytes;
+
+	GError				*error = NULL;
+	GDocsWriteHandle	*handle = _handle;
+	GCancellable		*cancellable = G_VFS_JOB (job)->cancellable;
+	GDataUploadStream	*output_stream = handle->output_stream;
 
 	n_bytes = g_output_stream_write (output_stream, buffer, buffer_size, cancellable, &error);
 	if (error != NULL)
@@ -907,6 +958,7 @@ do_write (GVfsBackend *backend, GVfsJobWrite *job,  GVfsBackendHandle _handle, c
 static void
 do_close_write (GVfsBackend *backend, GVfsJobCloseWrite *job, GVfsBackendHandle _handle)
 {
+	/*TODO*/
 	GDocsWriteHandle *handle = _handle;
 	gdocs_write_handle_free (handle);
 }

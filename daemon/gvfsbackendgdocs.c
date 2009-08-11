@@ -287,17 +287,20 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 
 void
 do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char *destination, GFileCopyFlags flags,
-		GFileProgressCallback progress_callback, gpointer progress_callback_data)
+ 		 GFileProgressCallback progress_callback, gpointer progress_callback_data)
 {
-	GDataDocumentsEntry	*new_entry;
-	GVfsGDataFile		*source_file, *destination_folder;
-
+	GDataDocumentsEntry		*new_entry, *renamed_document;
+	GVfsGDataFile			*source_file, *destination_folder, *containing_folder;
+	gchar					*destination_folder_name;
+	
+	gboolean				need_rename = FALSE;
+	gboolean				move = TRUE;
+	gboolean				move_to_root = FALSE;
 	GError					*error = NULL;
 	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
 	GDataDocumentsService	*service = G_VFS_BACKEND_GDOCS (backend)->service;
 
-	source_file = NULL;
-	destination_folder = NULL;
+	new_entry = NULL;
 
 	if (flags & G_FILE_COPY_BACKUP)
 	{
@@ -307,7 +310,6 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 	}
 
 	source_file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), source, cancellable, &error);
-
 	if (error != NULL)
 	{
 
@@ -318,70 +320,122 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 		return;
 	}
 
-	if (g_strcmp0 (destination, "/") != 0)
+
+	if (g_strcmp0 (destination, "/") == 0)
+		move_to_root = TRUE;
+
+	if (!move_to_root)
 	{
 		destination_folder = g_vfs_gdata_file_new_folder_from_gvfs (G_VFS_BACKEND_GDOCS (backend), destination, cancellable, &error);
+		destination_folder_name = g_vfs_gdata_file_get_parent_id_from_gvfs (destination);
 
-		if (error != NULL)
+		if (g_strcmp0 (destination_folder_name, "/") == 0)
 		{
-			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-			g_error_free (error);
+			gchar *source_folder = g_vfs_gdata_file_get_parent_id_from_gvfs (source);
+			g_print ("Test IS ////");
+
+			need_rename = TRUE;
+			move = FALSE;
+			g_clear_error (&error);
+			if (error != NULL)
+				g_print ("Folder as just been cleared");
+
+			if (g_strcmp0 (source_folder, "/") != 0)
+				move_to_root = TRUE;
+
 			if (destination_folder != NULL)
 				g_object_unref (destination_folder);
-			return;
+
 		}
 
-		/*Move the document on the server*/
-		new_entry = gdata_documents_service_move_document_to_folder (service,
-																	 GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_file)),
-																	 GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (destination_folder)),
-																	 cancellable, &error);
-		if (error != NULL)
+		if (move)
 		{
-			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-			g_error_free (error);
+			if (destination_folder == NULL)
+			{
+				g_print ("Pourquoi t la??=====\n");
+				g_clear_error (&error);
+				destination_folder = g_vfs_gdata_file_new_folder_from_gvfs (G_VFS_BACKEND_GDOCS (backend), destination_folder_name, cancellable, &error);
+				need_rename = TRUE;
+			}
+			g_print ("Pourquoi t la??\n");
+			if (error != NULL)
+			{
+				g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+				g_error_free (error);
+				if (destination_folder != NULL)
+					g_object_unref (destination_folder);
+				return;
+			}
+
+			/*Move the document on the server*/
+			new_entry = gdata_documents_service_move_document_to_folder (service,
+					GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_file)),
+					GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (destination_folder)),
+					cancellable, &error);
+			if (error != NULL)
+			{
+				g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+				g_error_free (error);
+				g_object_unref (source_file);
+				g_object_unref (destination_folder);
+				return;
+			}
+
 			g_object_unref (source_file);
 			g_object_unref (destination_folder);
-			return;
 		}
-		if (!GDATA_IS_DOCUMENTS_ENTRY (new_entry))
-		{
-			g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_NOT_FOUND, _("Error moving file %s"), source);
-			if (destination_folder != NULL)
-				g_object_unref (destination_folder);
-			return;
-		}
-
-		g_object_unref (source_file);
-		g_object_unref (destination_folder);
 	}
-	else
+	g_free (destination_folder_name);
+
+	if (move_to_root)
 	{
-		destination_folder = g_vfs_gdata_file_new_parent_from_gvfs (G_VFS_BACKEND_GDOCS (backend), source, cancellable, &error);
+		g_print ("Bien");
+		containing_folder = g_vfs_gdata_file_new_parent_from_gvfs (G_VFS_BACKEND_GDOCS (backend), source, cancellable, &error);
 		if (error != NULL)
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 			g_error_free (error);
 			g_object_unref (source_file);
-			g_object_unref (destination_folder);
+			g_object_unref (containing_folder);
 			return;
 		}
 		new_entry = gdata_documents_service_remove_document_from_folder (service,
 																		 GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_file)),
-																		 GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (destination_folder)),
+																		 GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (containing_folder)),
 														 				 cancellable, &error);
+		g_object_unref (source_file);
+		g_object_unref (containing_folder);
+		if (error != NULL)
+		{
+			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+			g_error_free (error);
+			return;
+		}
+	}
+
+	if (need_rename)
+	{
+		gchar *new_filename = g_vfs_gdata_file_get_document_id_from_gvfs (destination);
+
+		if (error != NULL)
+			g_print ("ba Pkoi");
+
+		g_print ("Renaming file");
+		if (new_entry == NULL)
+			new_entry = g_vfs_gdata_file_get_gdata_entry (source_file);
+		/*We rename the entry source entry*/
+		gdata_entry_set_title (new_entry, new_filename);
+		g_free (new_filename);
+
+		renamed_document = gdata_documents_service_update_document (service, new_entry, NULL, NULL, &error);
 		if (error != NULL)
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 			g_error_free (error);
 			g_object_unref (source_file);
-			g_object_unref (destination_folder);
 			return;
 		}
-		g_object_unref (source_file);
-		g_object_unref (destination_folder);
 	}
-
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 

@@ -513,6 +513,7 @@ do_make_directory (GVfsBackend *backend, GVfsJobMakeDirectory *job, const char *
 	g_object_unref (destination_folder);
 	if (new_folder != NULL)
 		g_object_unref (new_folder);
+
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);

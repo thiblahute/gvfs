@@ -126,7 +126,7 @@ g_vfs_backend_gdocs_rebuild_entries_type (GVfsBackendGdocs *backend, GCancellabl
 static void
 do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMountSource *mount_source,  gboolean is_automount)
 {
-	gchar				*username, *dummy_host, *ask_user, *ask_password, *prompt, *display_name;
+	gchar				*username, *dummy_host, *tmp, *ask_user, *ask_password, *prompt, *display_name;
 	gboolean			aborted, retval, save_password;
 	GMountSpec			*gdocs_mount_spec;
 	GAskPasswordFlags	flags;
@@ -139,13 +139,15 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 	prompt = NULL;
 	prompt = NULL;
 	dummy_host = NULL;
+	tmp = NULL;
 	save_password = FALSE;	
 
 	/*Get usename*/
 	username = g_strdup (g_mount_spec_get (mount_spec, "user"));
-	dummy_host = g_strdup (g_mount_spec_get (mount_spec, "host"));
+	tmp = dummy_host = g_strdup (g_mount_spec_get (mount_spec, "host"));
 
 
+	g_print ("Mounting\n");
 	/*Set the password asking flags.*/
 	if (!username)
 		flags = G_ASK_PASSWORD_NEED_USERNAME;
@@ -231,16 +233,22 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 						ask_password, password_save);
 			}
 
+			if (dummy_host == NULL)
+				dummy_host = "gdocs.com";
+
 			/*Mount it*/
 			gdocs_mount_spec= g_mount_spec_new ("gdocs");
 			g_mount_spec_set (gdocs_mount_spec, "user", ask_user);
-			
-			display_name = g_strdup_printf (_("%s's google documents"), ask_user);
+			g_mount_spec_set (gdocs_mount_spec, "host", dummy_host);
+
+			display_name = g_strdup_printf (_("%s@%s's google documents"), ask_user, dummy_host);
+			g_vfs_backend_set_display_name (backend, display_name);
+			g_free (display_name);
+			g_free (tmp);
+			g_free (ask_user);
 
 			g_vfs_backend_set_mount_spec (backend, gdocs_mount_spec);
 			g_mount_spec_unref (gdocs_mount_spec);
-			g_vfs_backend_set_display_name (backend, display_name);
-			g_free (display_name);
 			g_vfs_backend_set_icon_name (backend, "folder-remote");
 			break;
 		}
@@ -255,7 +263,6 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 			{
 				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
 				g_free (username);
-				g_free (ask_user);
 				g_free (ask_password);
 				g_free (prompt);
 				return;
@@ -266,7 +273,6 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 		mount_try++;
 	}
 
-	g_free (ask_user);
 	g_free (username);
 	g_free (ask_password);
 
@@ -274,7 +280,7 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 	else
 	{
-		g_debug ("===Connected\n");
+		g_print ("===Connected\n");
 		g_vfs_job_succeeded (G_VFS_JOB (job));
 	}
 }
@@ -400,7 +406,7 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 	{
 		/*Sets the query folder id*/
 		gdata_documents_query_set_folder_id (query, folder_id);
-		g_debug ("Folder ID: %s", folder_id);
+		g_print ("Folder ID: %s", folder_id);
 	}
 	gdata_documents_query_set_show_folders (query, TRUE);
 	documents_feed = gdata_documents_service_query_documents (service, query, cancellable, NULL, NULL, &error);
@@ -468,6 +474,7 @@ do_make_directory (GVfsBackend *backend, GVfsJobMakeDirectory *job, const char *
 	gchar					*title;
 	GDataCategory			*folder_category;
 	GDataDocumentsFolder	*folder, *new_folder;
+	GVfsGDataFile			*destination_folder;
 
 	GError					*error = NULL;
 	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
@@ -485,24 +492,33 @@ do_make_directory (GVfsBackend *backend, GVfsJobMakeDirectory *job, const char *
 	folder = gdata_documents_folder_new (NULL);
 	folder_category = gdata_category_new ("http://schemas.google.com/docs/2007#folder", "http://schemas.google.com/g/2005#kind", "folder");
 	gdata_entry_add_category (GDATA_ENTRY (folder), folder_category);
+	g_object_unref (folder_category);
 	gdata_entry_set_title (GDATA_ENTRY (folder), title);
 	g_free (title);
 
-	new_folder = GDATA_DOCUMENTS_FOLDER (gdata_documents_service_upload_document (service, GDATA_DOCUMENTS_ENTRY (folder), NULL, NULL, cancellable, &error));
+	destination_folder = g_vfs_gdata_file_new_parent_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
 		g_object_unref (folder);
-		g_object_unref (folder_category);
-		if (new_folder != NULL)
-			g_object_unref (new_folder);
+		if (destination_folder != NULL)
+			g_object_unref (destination_folder);
 		return;
 	}
 
+	new_folder = GDATA_DOCUMENTS_FOLDER (gdata_documents_service_upload_document (service, GDATA_DOCUMENTS_ENTRY (folder), NULL, 
+										 g_vfs_gdata_file_get_gdata_entry (destination_folder), cancellable, &error));
 	g_object_unref (folder);
-	g_object_unref (new_folder);
-	g_object_unref (folder_category);
+	g_object_unref (destination_folder);
+	if (new_folder != NULL)
+		g_object_unref (new_folder);
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		return;
+	}
 
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
@@ -612,7 +628,7 @@ do_delete (GVfsBackend *backend, GVfsJobDelete *job, const char *filename)
 			g_object_unref (file);
 		return;
 	}
-	g_debug ("%s :deleted\n", gdata_entry_get_title (g_vfs_gdata_file_get_gdata_entry (file)));
+	g_print ("%s :deleted\n", gdata_entry_get_title (g_vfs_gdata_file_get_gdata_entry (file)));
 
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }

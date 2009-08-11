@@ -197,7 +197,7 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 							 "gdata-entry", NULL,
 							 NULL);
 	}
-	g_debug ("New from GVFS entry_id: %s\n", entry_id);
+	g_print ("New from GVFS entry_id: %s\n", entry_id);
 
 	/* if the GHashTable which make the link between an entry-id and a type is empty, we build it*/
 	if (g_hash_table_size (backend->entries_type) == 0)

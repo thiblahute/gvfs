@@ -70,20 +70,21 @@ convert_slashes (char *str)
  * g_vfs_gdata_file_get_document_id_from_gvfs
  * Gets the id of the document passed as @path.
  * @path a gvfs path
- * If @path is the root, return NULL
  *
- * Returns: the #GDataDocumentsEntry::id corresponding to @path
+ * Returns: the #GDataDocumentsEntry::id corresponding to @path, or "/" if it's the root directory
  * */
 gchar *
 g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path)
 {
-	gchar **entries_id_array, *entry_id = NULL;
-	gint i = 0;
+	gchar	**entries_id_array; 
+	
+	gchar	*entry_id = NULL;
+	gint	i = 0;
 
 	if (g_strcmp0 (path, "/") == 0)
 		return g_strdup ("/");
-	entries_id_array = g_strsplit (path, "/", 0);
 
+	entries_id_array = g_strsplit (path, "/", 0);
 	while (entries_id_array[i] != NULL)
 	{
 		g_free (entry_id);
@@ -99,15 +100,12 @@ g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path)
  * Gets the id of the document's direct parent.
  * @path: a gvfs path
  *
- * If @path's parent is the root, return "/"
- *
- * Returns: the parent entry ID.
+ * Returns: the parent entry ID. or "/" if @path's parent is the root directory
  * */
 gchar *
 g_vfs_gdata_file_get_parent_id_from_gvfs (const gchar *path)
 {
-	gchar **entries_id_array, *entry_id = NULL;
-	gint i = 0;
+	gchar	**entries_id_array, *entry_id;
 
 	if (strcmp (path, "/") == 0)
 	   return g_strdup ("/");
@@ -139,11 +137,14 @@ g_vfs_gdata_file_get_parent_id_from_gvfs (const gchar *path)
  * If the file doesn't exit, a G_IO_ERROR_NOT_FOUND is set.
  * If there was an error trying to get the feed, the server error is set.
  * If the file isn't a folder a G_IO_ERROR_NOT_DIRECTORY error is set.
+ * An GDataDocumentsServiceError can also be set
  **/
 GVfsGDataFile *
 g_vfs_gdata_file_new_folder_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_path, GCancellable *cancellable, GError **error)
 {
-	GVfsGDataFile *folder = g_vfs_gdata_file_new_from_gvfs (backend, gvfs_path, cancellable, error);
+	GVfsGDataFile *folder;
+   
+	folder = g_vfs_gdata_file_new_from_gvfs (backend, gvfs_path, cancellable, error);
 	if (*error != NULL)
 	{
 		if (folder != NULL)
@@ -173,20 +174,21 @@ g_vfs_gdata_file_new_folder_from_gvfs (GVfsBackendGdocs *backend, const gchar *g
  * Returns: a new GVfsGDataFile, o %NULL
  * If the file doesn't exit, a G_IO_ERROR_NOT_FOUND is set.
  * If there was an error trying to get the feed, the server error is set.
+ * An GDataDocumentsServiceError can also be set 
  **/
 GVfsGDataFile *
 g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_path, GCancellable *cancellable, GError **error)
 {
-	GDataDocumentsEntry *entry = NULL;
-	gchar *entry_id;
-	GType *document_type;
-	gboolean entry_build = FALSE;
-	GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
+	gchar					*entry_id;
+	GType					*document_type;
+	GDataDocumentsEntry		*entry;
+
+	gboolean				entry_build = FALSE;
+	GDataDocumentsService	*service = G_VFS_BACKEND_GDOCS (backend)->service;
 
 	g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
 	g_return_val_if_fail (gvfs_path != NULL, NULL);
 
-	g_print ("New from GVFS: %s\n", gvfs_path);
 	entry_id = g_vfs_gdata_file_get_document_id_from_gvfs (gvfs_path);
 	if (g_strcmp0 (entry_id, "/") == 0)
 	{
@@ -195,7 +197,7 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 							 "gdata-entry", NULL,
 							 NULL);
 	}
-	g_print ("New from GVFS entry_id: %s\n", entry_id);
+	g_debug ("New from GVFS entry_id: %s\n", entry_id);
 
 	/* if the GHashTable which make the link between an entry-id and a type is empty, we build it*/
 	if (g_hash_table_size (backend->entries_type) == 0)
@@ -238,11 +240,6 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 			g_object_unref (entry);
 		return NULL;
 	}
-	if (!GDATA_IS_ENTRY (entry))
-	{
-		g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, _("%s not found a document"), gvfs_path);
-		return NULL;
-	}
 
 	return g_object_new (G_VFS_TYPE_GDATA_FILE, "backend", backend, "gdata-entry", GDATA_ENTRY (entry), "gvfs-path", gvfs_path, NULL);
 }
@@ -270,7 +267,7 @@ g_vfs_gdata_file_new_from_gdata (GVfsBackendGdocs *backend, GDataEntry *gdata_en
 		gvfs_path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (gdata_entry));
 	else
 	{
-		g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, _("%s not found a document"), gdata_entry_get_title (gdata_entry));
+		g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, "Not found a document");
 		return NULL;
 	}
 
@@ -313,8 +310,8 @@ g_vfs_gdata_file_new_parent (GVfsBackendGdocs *backend, const GVfsGDataFile *fil
 GVfsGDataFile *
 g_vfs_gdata_file_new_parent_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_path, GCancellable *cancellable, GError **error)
 {
-	GVfsGDataFile *parent_folder;
-	gchar *parent_entry_id, *parent_entry_pseudo_path;
+	GVfsGDataFile	*parent_folder;
+	gchar			*parent_entry_id, *parent_entry_pseudo_path;
 
 	g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
 	g_return_val_if_fail (gvfs_path != NULL, NULL);
@@ -333,8 +330,6 @@ g_vfs_gdata_file_new_parent_from_gvfs (GVfsBackendGdocs *backend, const gchar *g
 	parent_entry_pseudo_path = g_strconcat ("/", parent_entry_id, NULL);
 	g_free (parent_entry_id);
 
-	g_print ("Parent entry pseudo_path: %s\n", parent_entry_pseudo_path);
-
 	parent_folder =  g_vfs_gdata_file_new_folder_from_gvfs (backend, parent_entry_pseudo_path, cancellable, error);
 	g_free (parent_entry_pseudo_path);
 
@@ -352,7 +347,7 @@ g_vfs_gdata_file_new_parent_from_gvfs (GVfsBackendGdocs *backend, const gchar *g
 gboolean
 g_vfs_gdata_file_is_root (const GVfsGDataFile *file)
 {
-  g_return_val_if_fail (g_vfs_gdata_file_is_folder (file), FALSE);
+  g_return_val_if_fail (G_VFS_IS_GDATA_FILE (file), FALSE);
 
   return file->priv->gvfs_path[0] == '/' && file->priv->gvfs_path[1] == 0;
 }
@@ -392,117 +387,115 @@ g_vfs_gdata_file_get_gvfs_path (const GVfsGDataFile *file)
 GFileInfo *
 g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeMatcher *matcher, GError **error)
 {
-	GFileType file_type;
-	GTimeVal t;
-	GIcon *icon;
-	gchar *content_type;
-	GString *display_name;
+	GTimeVal	t;
+	GIcon		*icon;
+	gchar		*content_type;
+	GString		*display_name;
 	const gchar *filename;
+
+	g_return_val_if_fail (G_VFS_IS_GDATA_FILE (file), NULL);
 
 	if (!G_IS_FILE_INFO (info))
 		info = g_file_info_new();
 
-	if (file->priv->gdata_entry != NULL || g_strcmp0 (file->priv->gvfs_path, "/") == 0)
+	if (GDATA_IS_DOCUMENTS_ENTRY (file->priv->gdata_entry))
 	{
-		if (GDATA_IS_DOCUMENTS_ENTRY (file->priv->gdata_entry))
-		{
-			filename = gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (file->priv->gdata_entry));
-			g_file_info_set_name (info, filename);
-			g_file_info_set_modification_time (info, &t);
-		}
-		else if (!g_vfs_gdata_file_is_root (file))
-		{
-			g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, _("%s not supported"), file->priv->gvfs_path);
-			return NULL;
-		}
+		filename = gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (file->priv->gdata_entry));
+		g_file_info_set_name (info, filename);
+		g_file_info_set_modification_time (info, &t);
+	}
+	else if (!g_vfs_gdata_file_is_root (file))
+	{
+		g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, _("%s not supported"), file->priv->gvfs_path);
+		return NULL;
+	}
 
-		/* We set the content file type and file size if necessary*/
-		if (g_vfs_gdata_file_is_folder (file))
-		{
-			g_file_info_set_file_type (info, G_FILE_TYPE_DIRECTORY);
+	/* We set the content file type and file size if necessary*/
+	if (g_vfs_gdata_file_is_folder (file))
+	{
+		g_file_info_set_file_type (info, G_FILE_TYPE_DIRECTORY);
 
-			content_type = g_strdup ("inode/directory");
-			if (g_strcmp0 (file->priv->gvfs_path, "/") == 0)
-				icon = g_themed_icon_new ("folder-remote");
-			else
-				icon = g_themed_icon_new ("folder");
-		}
+		content_type = g_strdup ("inode/directory");
+		if (g_strcmp0 (file->priv->gvfs_path, "/") == 0)
+			icon = g_themed_icon_new ("folder-remote");
 		else
-		{ 
-			g_file_info_set_file_type (info, G_FILE_TYPE_REGULAR);
+			icon = g_themed_icon_new ("folder");
+	}
+	else
+	{ 
+		g_file_info_set_file_type (info, G_FILE_TYPE_REGULAR);
 
-			/*Create the content type*/
-			if (GDATA_IS_DOCUMENTS_SPREADSHEET (file->priv->gdata_entry))
-				content_type = g_strdup ("application/x-vnd.oasis.opendocument.spreadsheet");
-			else if (GDATA_IS_DOCUMENTS_TEXT (file->priv->gdata_entry))
-				content_type = g_strdup ("application/vnd.oasis.opendocument.text");
-			else if (GDATA_IS_DOCUMENTS_PRESENTATION (file->priv->gdata_entry))
-				content_type = g_strdup ("application/vnd.ms-powerpoint");
-			else
-				content_type = g_content_type_guess (display_name->str, NULL, 0, NULL);
-
-			/*We set the size as the maximum size we can upload on the server*/
-			g_file_info_set_size (info, 1000);
-		}
-
-		g_file_info_set_content_type (info, content_type);
-
-		if (g_vfs_gdata_file_is_root (file))
-			return;
-
-		/* Set the display name corresponding to the GDataEntry::title parameter*/
-		display_name = g_string_new (gdata_entry_get_title (file->priv->gdata_entry));
-		/*We can't name a file with Slashes*/
-		convert_slashes (display_name->str);
-		if (*display_name->str == '.')
-			g_file_info_set_is_hidden (info, TRUE);
-
-		if (g_strstr_len (display_name->str, strlen (display_name), "\357\277\275") != NULL)
-			g_string_append (display_name, _(" (invalid encoding)"));
+		/*Create the content type*/
+		if (GDATA_IS_DOCUMENTS_SPREADSHEET (file->priv->gdata_entry))
+			content_type = g_strdup ("application/x-vnd.oasis.opendocument.spreadsheet");
+		else if (GDATA_IS_DOCUMENTS_TEXT (file->priv->gdata_entry))
+			content_type = g_strdup ("application/vnd.oasis.opendocument.text");
+		else if (GDATA_IS_DOCUMENTS_PRESENTATION (file->priv->gdata_entry))
+			content_type = g_strdup ("application/vnd.ms-powerpoint");
 		else
-		{
-			/*Set the extensions*/
-			if (GDATA_IS_DOCUMENTS_SPREADSHEET (file->priv->gdata_entry))
-			{
-				if (!g_str_has_suffix (display_name->str, ".ods"))
-					g_string_append (display_name, ".ods");
-			}
-			else if (GDATA_IS_DOCUMENTS_TEXT (file->priv->gdata_entry))
-			{
-				if (!g_str_has_suffix (display_name->str, ".odt"))
-					g_string_append (display_name, ".odt");
-			}
-			else if (GDATA_IS_DOCUMENTS_PRESENTATION (file->priv->gdata_entry))
-			{
-				if (!g_str_has_suffix (display_name->str, ".ppt"))
-					g_string_append (display_name, ".ppt");
-			}
-		}
-		g_file_info_set_display_name (info, display_name->str);
+			content_type = g_content_type_guess (display_name->str, NULL, 0, NULL);
 
-		if (g_file_attribute_matcher_matches (matcher, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE) ||
+		/*We set the size as the maximum size we can upload on the server*/
+		g_file_info_set_size (info, 1000);
+	}
+
+	g_file_info_set_content_type (info, content_type);
+
+	if (g_vfs_gdata_file_is_root (file))
+		return info;
+
+	/* Set the display name corresponding to the GDataEntry::title parameter*/
+	display_name = g_string_new (gdata_entry_get_title (file->priv->gdata_entry));
+	/*We can't name a file with Slashes*/
+	convert_slashes (display_name->str);
+	if (*display_name->str == '.')
+		g_file_info_set_is_hidden (info, TRUE);
+
+	if (g_strstr_len (display_name->str, strlen (display_name), "\357\277\275") != NULL)
+		g_string_append (display_name, " (invalid encoding)");
+	else
+	{
+		/*Set the extensions*/
+		if (GDATA_IS_DOCUMENTS_SPREADSHEET (file->priv->gdata_entry))
+		{
+			if (!g_str_has_suffix (display_name->str, ".ods"))
+				g_string_append (display_name, ".ods");
+		}
+		else if (GDATA_IS_DOCUMENTS_TEXT (file->priv->gdata_entry))
+		{
+			if (!g_str_has_suffix (display_name->str, ".odt"))
+				g_string_append (display_name, ".odt");
+		}
+		else if (GDATA_IS_DOCUMENTS_PRESENTATION (file->priv->gdata_entry))
+		{
+			if (!g_str_has_suffix (display_name->str, ".ppt"))
+				g_string_append (display_name, ".ppt");
+		}
+	}
+	g_file_info_set_display_name (info, display_name->str);
+
+	if (g_file_attribute_matcher_matches (matcher, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE) ||
 			g_file_attribute_matcher_matches (matcher, G_FILE_ATTRIBUTE_STANDARD_ICON))
+	{
+		icon = NULL;
+
+		if (content_type)
 		{
-			icon = NULL;
-
-			if (content_type)
-			{
-				icon = g_content_type_get_icon (content_type);
-				g_file_info_set_content_type (info, content_type);
-			}
-			if (icon == NULL)
-				icon = g_themed_icon_new ("text-x-generic");
-
-			g_file_info_set_icon (info, icon);
-			g_object_unref (icon);
+			icon = g_content_type_get_icon (content_type);
+			g_file_info_set_content_type (info, content_type);
 		}
-		g_free (content_type);
+		if (icon == NULL)
+			icon = g_themed_icon_new ("text-x-generic");
 
-		if (g_file_attribute_matcher_matches (matcher, G_FILE_ATTRIBUTE_ETAG_VALUE))
-		{
-			const gchar *etag = gdata_entry_get_etag (file->priv->gdata_entry);
-			g_file_info_set_attribute_string (info, G_FILE_ATTRIBUTE_ETAG_VALUE, etag);
-		}
+		g_file_info_set_icon (info, icon);
+		g_object_unref (icon);
+	}
+	g_free (content_type);
+
+	if (g_file_attribute_matcher_matches (matcher, G_FILE_ATTRIBUTE_ETAG_VALUE))
+	{
+		const gchar *etag = gdata_entry_get_etag (file->priv->gdata_entry);
+		g_file_info_set_attribute_string (info, G_FILE_ATTRIBUTE_ETAG_VALUE, etag);
 	}
 	g_string_free (display_name, TRUE);
 
@@ -575,15 +568,15 @@ g_vfs_gdata_file_get_download_uri (GVfsGDataFile *file, GCancellable *cancellabl
 	}
 	else if (GDATA_IS_DOCUMENTS_SPREADSHEET (entry))
 	{
-		return gdata_documents_spreadsheet_get_download_uri (entry, GDATA_DOCUMENTS_SPREADSHEET_ODS, -1);
+		return gdata_documents_spreadsheet_get_download_uri (GDATA_DOCUMENTS_SPREADSHEET (entry), GDATA_DOCUMENTS_SPREADSHEET_ODS, -1);
 	}
 	else if (GDATA_IS_DOCUMENTS_TEXT (entry))
 	{
-		return gdata_documents_text_get_download_uri (entry, GDATA_DOCUMENTS_TEXT_ODT);
+		return gdata_documents_text_get_download_uri (GDATA_DOCUMENTS_TEXT (entry), GDATA_DOCUMENTS_TEXT_ODT);
 	}
 	else if (GDATA_IS_DOCUMENTS_PRESENTATION (entry))
 	{
-		return gdata_documents_presentation_get_download_uri (entry, GDATA_DOCUMENTS_PRESENTATION_PPT);
+		return gdata_documents_presentation_get_download_uri (GDATA_DOCUMENTS_PRESENTATION (entry), GDATA_DOCUMENTS_PRESENTATION_PPT);
 	}
 	else
 	{

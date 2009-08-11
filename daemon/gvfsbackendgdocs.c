@@ -114,7 +114,6 @@ g_vfs_backend_gdocs_rebuild_entries_type (GVfsBackendGdocs *backend, GCancellabl
 	}
 
 	entries_list = gdata_feed_get_entries (GDATA_FEED (tmp_feed));
-	g_print ("Rebuild entris\n");
 	for (i = entries_list; i != NULL; i=i->next)
 	{
 		const gchar *entry_id = gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (i->data));
@@ -235,13 +234,8 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 			/*Mount it*/
 			gdocs_mount_spec= g_mount_spec_new ("gdocs");
 			g_mount_spec_set (gdocs_mount_spec, "user", ask_user);
-			if (dummy_host)
-			{
-				g_mount_spec_set (gdocs_mount_spec, "host", dummy_host);
-				display_name = g_strdup_printf (_("%s@%s's google documents"), ask_user, dummy_host);
-			}
-			else
-				display_name = g_strdup_printf (_("%s's google documents"), ask_user);
+			
+			display_name = g_strdup_printf (_("%s's google documents"), ask_user);
 
 			g_vfs_backend_set_mount_spec (backend, gdocs_mount_spec);
 			g_mount_spec_unref (gdocs_mount_spec);
@@ -525,6 +519,8 @@ do_open_for_read (GVfsBackend *backend, GVfsJobOpenForRead *job, const char *fil
 	GCancellable		*cancellable = G_VFS_JOB (job)->cancellable;
 	GVfsBackendGdocs	*gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 
+	g_print ("OPEN READ\n");
+
 	file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
 	if (error != NULL)
 	{
@@ -552,7 +548,6 @@ do_open_for_read (GVfsBackend *backend, GVfsJobOpenForRead *job, const char *fil
 
 	g_vfs_job_open_for_read_set_handle (job, stream);
 	g_vfs_job_open_for_read_set_can_seek (job, FALSE);
-
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
@@ -565,6 +560,7 @@ do_read (GVfsBackend *backend, GVfsJobRead *job, GVfsBackendHandle handle, char 
 	GOutputStream		*stream = G_INPUT_STREAM (handle);
 	GVfsBackendGdocs	*gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 
+	g_print ("DO READ\n");
 	n_bytes = g_input_stream_read (stream, buffer, bytes_requested, G_VFS_JOB (job)->cancellable, &error);
 	if (error != NULL)
 	{

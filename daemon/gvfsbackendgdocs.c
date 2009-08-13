@@ -454,6 +454,7 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 	GDataDocumentsFeed		*documents_feed;
 	GDataDocumentsQuery		*query ;
 
+	gboolean				in_folder =  FALSE;
 	GError					*error = NULL;
 	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
 	GDataDocumentsService	*service = G_VFS_BACKEND_GDOCS (backend)->service;
@@ -465,6 +466,7 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 	{
 		/*Sets the query folder id*/
 		gdata_documents_query_set_folder_id (query, folder_id);
+		in_folder = TRUE;
 		g_print ("Folder ID: %s\n", folder_id);
 	}
 	gdata_documents_query_set_show_folders (query, TRUE);
@@ -482,6 +484,9 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 
+	if (documents_feed == NULL)
+		g_print ("FEED NULL???");
+
 	/*List documents*/
 	for (i = gdata_feed_get_entries (GDATA_FEED (documents_feed)); i != NULL; i = i->next)
 	{
@@ -491,8 +496,9 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 		path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (i->data));
 		parent_id = g_vfs_gdata_file_get_parent_id_from_gvfs (path);
 
+		g_message ("Path: %s folder ID %s, parent_id: %s", folder_id, parent_id);
 		/*We check that the file is in the selected folder (not in a child of it)*/
-		if (g_strcmp0 (folder_id, parent_id) == 0)
+		if (g_strcmp0 (folder_id, parent_id) == 0 || in_folder)
 		{
 			GVfsGDataFile *file = g_vfs_gdata_file_new_from_gdata (G_VFS_BACKEND_GDOCS (backend), GDATA_ENTRY (i->data), &error);
 			if (error != NULL)

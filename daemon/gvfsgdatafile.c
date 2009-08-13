@@ -192,9 +192,11 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 	entry_id = g_vfs_gdata_file_get_document_id_from_gvfs (gvfs_path);
 	if (g_strcmp0 (entry_id, "/") == 0)
 	{
+		g_print ("New from GVFS");
 		return g_object_new (G_VFS_TYPE_GDATA_FILE,
 							 "backend", backend,
 							 "gdata-entry", NULL,
+							 "gvfs-path", "/",
 							 NULL);
 	}
 	g_print ("New from GVFS entry_id: %s\n", entry_id);
@@ -324,6 +326,7 @@ g_vfs_gdata_file_new_parent_from_gvfs (GVfsBackendGdocs *backend, const gchar *g
 		return g_object_new (G_VFS_TYPE_GDATA_FILE,
 							 "backend", backend,
 							 "gdata-entry", NULL,
+							 "gvfs-path", "/",
 							 NULL);
 	}
 
@@ -348,6 +351,8 @@ gboolean
 g_vfs_gdata_file_is_root (const GVfsGDataFile *file)
 {
   g_return_val_if_fail (G_VFS_IS_GDATA_FILE (file), FALSE);
+
+  g_print ("IS root: %s\n", file->priv->gvfs_path);
 
   return file->priv->gvfs_path[0] == '/' && file->priv->gvfs_path[1] == 0;
 }

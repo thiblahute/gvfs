@@ -321,30 +321,32 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 	}
 
 
-	if (g_strcmp0 (destination, "/") == 0)
+	destination_folder_name = g_vfs_gdata_file_get_parent_id_from_gvfs (destination);
+	destination_folder = g_vfs_gdata_file_new_folder_from_gvfs (G_VFS_BACKEND_GDOCS (backend), destination, cancellable, &error);
+	
+	g_print ("Destination: %s\n", destination);
+
+	/* If the destination is a file and the parent folder is the root directory we just want to move out of the folder
+	 * NOT rename with the file id*/
+	if (destination_folder == NULL && g_strcmp0 (destination_folder_name, "/") == 0)
+	{
 		move_to_root = TRUE;
+		g_clear_error (&error);
+	}
 
 	if (!move_to_root)
 	{
-		destination_folder = g_vfs_gdata_file_new_folder_from_gvfs (G_VFS_BACKEND_GDOCS (backend), destination, cancellable, &error);
-		destination_folder_name = g_vfs_gdata_file_get_parent_id_from_gvfs (destination);
 
 		if (g_strcmp0 (destination_folder_name, "/") == 0)
 		{
 			gchar *source_folder = g_vfs_gdata_file_get_parent_id_from_gvfs (source);
-			g_print ("Test IS ////");
 
 			need_rename = TRUE;
 			move = FALSE;
 			g_clear_error (&error);
-			if (error != NULL)
-				g_print ("Folder as just been cleared");
 
 			if (g_strcmp0 (source_folder, "/") != 0)
 				move_to_root = TRUE;
-
-			if (destination_folder != NULL)
-				g_object_unref (destination_folder);
 
 		}
 
@@ -382,27 +384,30 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 			}
 
 			g_object_unref (source_file);
-			g_object_unref (destination_folder);
 		}
 	}
 	g_free (destination_folder_name);
+	if (destination_folder != NULL)
+		g_object_unref (destination_folder);
 
 	if (move_to_root)
 	{
-		g_print ("Bien");
+		g_print ("Is moving to root");
+		/* we need to check for the error that could have happend building the destination_folder*/
 		containing_folder = g_vfs_gdata_file_new_parent_from_gvfs (G_VFS_BACKEND_GDOCS (backend), source, cancellable, &error);
 		if (error != NULL)
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 			g_error_free (error);
 			g_object_unref (source_file);
-			g_object_unref (containing_folder);
+			if (containing_folder != NULL)
+				g_object_unref (containing_folder);
 			return;
 		}
 		new_entry = gdata_documents_service_remove_document_from_folder (service,
 																		 GDATA_DOCUMENTS_ENTRY (g_vfs_gdata_file_get_gdata_entry (source_file)),
-																		 GDATA_DOCUMENTS_FOLDER (g_vfs_gdata_file_get_gdata_entry (containing_folder)),
-														 				 cancellable, &error);
+																		 g_vfs_gdata_file_get_gdata_entry (containing_folder),
+																		 cancellable, &error);
 		g_object_unref (source_file);
 		g_object_unref (containing_folder);
 		if (error != NULL)
@@ -420,7 +425,7 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 		if (error != NULL)
 			g_print ("ba Pkoi");
 
-		g_print ("Renaming file");
+		g_print ("Renaming file: %s", new_filename);
 		if (new_entry == NULL)
 			new_entry = g_vfs_gdata_file_get_gdata_entry (source_file);
 		/*We rename the entry source entry*/
@@ -460,7 +465,7 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 	{
 		/*Sets the query folder id*/
 		gdata_documents_query_set_folder_id (query, folder_id);
-		g_print ("Folder ID: %s", folder_id);
+		g_print ("Folder ID: %s\n", folder_id);
 	}
 	gdata_documents_query_set_show_folders (query, TRUE);
 	documents_feed = gdata_documents_service_query_documents (service, query, cancellable, NULL, NULL, &error);

@@ -328,8 +328,9 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 
 	/* If the destination is a file and the parent folder is the root directory we just want to move out of the folder
 	 * NOT rename with the file id*/
-	if (destination_folder == NULL && g_strcmp0 (destination_folder_name, "/") == 0)
+	if (destination_folder == NULL && g_strcmp0 (destination_folder_name, "/") == 0 && !g_vfs_gdata_file_is_folder (source_file))
 	{
+		g_print("(destination_folder == NULL && g_strcmp0 (destination_folder_name, == 0)");
 		move_to_root = TRUE;
 		g_clear_error (&error);
 	}
@@ -345,7 +346,7 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 			move = FALSE;
 			g_clear_error (&error);
 
-			if (g_strcmp0 (source_folder, "/") != 0)
+			if (g_strcmp0 (source_folder, "/") != 0 )
 				move_to_root = TRUE;
 
 		}

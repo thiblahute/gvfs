@@ -198,7 +198,7 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 							 "gvfs-path", "/",
 							 NULL);
 	}
-	g_print ("New from GVFS entry_id: %s\n", entry_id);
+	//g_print ("New from GVFS entry_id: %s\n", entry_id);
 
 	/* if the GHashTable which make the link between an entry-id and a type is empty, we build it*/
 	if (g_hash_table_size (backend->entries_type) == 0)
@@ -228,7 +228,7 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 
 	if (document_type == NULL)
 	{
-		g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, _("%s not found a document"), gvfs_path);
+		g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, _("%s not found"), gvfs_path);
 		return NULL;
 	}
 
@@ -351,8 +351,6 @@ g_vfs_gdata_file_is_root (const GVfsGDataFile *file)
 {
   g_return_val_if_fail (G_VFS_IS_GDATA_FILE (file), FALSE);
 
-  g_print ("IS root: %s\n", file->priv->gvfs_path);
-
   return file->priv->gvfs_path[0] == '/' && file->priv->gvfs_path[1] == 0;
 }
 
@@ -431,7 +429,7 @@ g_vfs_gdata_file_get_info (GVfsGDataFile *file, GFileInfo *info, GFileAttributeM
 
 		/*Create the content type*/
 		if (GDATA_IS_DOCUMENTS_SPREADSHEET (file->priv->gdata_entry))
-			content_type = g_strdup ("application/x-vnd.oasis.opendocument.spreadsheet");
+			content_type = g_strdup ("application/vnd.oasis.opendocument.spreadsheet");
 		else if (GDATA_IS_DOCUMENTS_TEXT (file->priv->gdata_entry))
 			content_type = g_strdup ("application/vnd.oasis.opendocument.text");
 		else if (GDATA_IS_DOCUMENTS_PRESENTATION (file->priv->gdata_entry))

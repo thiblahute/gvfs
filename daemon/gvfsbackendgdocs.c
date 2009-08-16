@@ -165,7 +165,17 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 		{
 			prompt = g_strdup_printf (_("Enter %s's google documents password"), username);
 			if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &ask_user,	NULL, FALSE,
-						&password_save) || aborted)
+						&password_save))
+			{
+				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Password access issue"));
+				g_free (username);
+				g_free (ask_user);
+				g_free (ask_password);
+				g_free (prompt);
+
+				return;
+			}
+			if (aborted)
 			{
 				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
 				g_free (username);
@@ -173,7 +183,8 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 				g_free (ask_password);
 				g_free (prompt);
 				return;
-			}
+			}	
+
 			save_password = TRUE;
 			ask_user = g_strdup (username);
 			g_free (prompt);
@@ -183,15 +194,24 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 	{
 		prompt = g_strdup ("Enter a username to access google documents.");
 		if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &ask_user,	NULL, FALSE,
-					&password_save) || aborted)
+					&password_save))
 		{
-			g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
+			g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Ask password issue"));
 			g_free (username);
 			g_free (ask_user);
 			g_free (prompt);
 			g_free (ask_password);
 			return;
 		}
+		if (aborted)
+		{
+			g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
+			g_free (username);
+			g_free (ask_user);
+			g_free (ask_password);
+			g_free (prompt);
+			return;
+		}	
 		g_free (prompt);
 		username = g_strdup (ask_user);
 		if (!g_vfs_keyring_lookup_password (username, NULL, NULL, "gdata", NULL, NULL, 0, &ask_user, NULL, &ask_password))
@@ -203,7 +223,16 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 				flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
 
 			if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &username,	NULL, FALSE,
-						&password_save) || aborted)
+						&password_save))
+			{
+				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Ask password issue"));
+				g_free (username);
+				g_free (ask_user);
+				g_free (ask_password);
+				g_free (prompt);
+				return;
+			}
+			if (aborted)
 			{
 				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
 				g_free (username);
@@ -211,7 +240,7 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 				g_free (ask_password);
 				g_free (prompt);
 				return;
-			}
+			}	
 			save_password = TRUE;
 			g_free (prompt);
 		}
@@ -259,14 +288,24 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 			if (g_vfs_keyring_is_available ())
 				flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
 			if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &username,	NULL, FALSE,
-						&password_save) || aborted)
+						&password_save))
 			{
-				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
+				g_message ("Ask password issue");
+				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Ask password issue"));	
 				g_free (username);
 				g_free (ask_password);
 				g_free (prompt);
 				return;
 			}
+			if (aborted)
+			{
+				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
+				g_free (username);
+				g_free (ask_user);
+				g_free (ask_password);
+				g_free (prompt);
+				return;
+		}	
 			save_password = TRUE;
 			g_free (prompt);
 		}
@@ -1035,6 +1074,6 @@ g_vfs_backend_gdocs_class_init (GVfsBackendGdocsClass *klass)
 	backend_class->close_write = do_close_write;
 	backend_class->write = do_write;
 	backend_class->query_info = do_query_info;
-/*	backend_class->create = do_create;*/
+	backend_class->create = do_create;
 
 }

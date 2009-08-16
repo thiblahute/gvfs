@@ -359,10 +359,10 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 		return;
 	}
 
-	source_id = g_vfs_gdata_file_get_document_id_from_gvfs (source);
-	source_parent_id = g_vfs_gdata_file_get_parent_id_from_gvfs (source); 
-	destination_id = g_vfs_gdata_file_get_document_id_from_gvfs (destination);
-	destination_parent_id = g_vfs_gdata_file_get_parent_id_from_gvfs (destination);
+	source_id = g_path_get_basename (source);
+	source_parent_id = g_path_get_parent_basename (source); 
+	destination_id = g_path_get_basename (destination);
+	destination_parent_id = g_path_get_parent_basename (destination);
 
 	/*If we move a file to root without renaming it, the file shouldn't be in root*/
 	if (g_strcmp0 (source_id, destination_id) == 0 && g_strcmp0 (destination_parent_id, "/") == 0 && g_strcmp0 (source_parent_id, "/") != 0)
@@ -457,7 +457,7 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 
 	if (need_rename)
 	{
-		gchar *new_filename = g_vfs_gdata_file_get_document_id_from_gvfs (destination);
+		gchar *new_filename = g_path_get_basename (destination);
 
 		g_message ("Renaming file: %s", new_filename);
 		if (new_entry == NULL)
@@ -520,11 +520,11 @@ do_set_display_name (GVfsBackend *backend,
 		return;
 	}
 	g_object_unref (file);
-	g_object_unref (renamed_entry);
 
 	dirname = g_path_get_dirname (filename);
-	new_path = g_build_filename (dirname, display_name, NULL);
+	new_path = g_build_filename (dirname, gdata_documents_entry_get_document_id (renamed_entry), NULL);
 	g_free (dirname);
+	g_object_unref (renamed_entry);
     g_vfs_job_set_display_name_set_new_path (job, new_path);
     g_vfs_job_succeeded (G_VFS_JOB (job));
 	g_free (new_path);
@@ -547,7 +547,7 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 
 	/*Get documents properties*/
 	query = gdata_documents_query_new (NULL);
-	folder_id = g_vfs_gdata_file_get_document_id_from_gvfs (dirname);
+	folder_id = g_path_get_basename (dirname);
 	if (strcmp (dirname, "/") != 0)
 	{
 		/*Sets the query folder id*/
@@ -580,7 +580,7 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 
 		info = NULL;
 		path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (i->data));
-		parent_id = g_vfs_gdata_file_get_parent_id_from_gvfs (path);
+		parent_id = g_path_get_parent_basename (path);
 
 		//g_message ("Path: %s folder ID %s, parent_id: %s", folder_id, parent_id);
 		/*We check that the file is in the selected folder (not in a child of it)*/
@@ -631,7 +631,7 @@ do_make_directory (GVfsBackend *backend, GVfsJobMakeDirectory *job, const char *
 	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
 	GDataDocumentsService	*service = G_VFS_BACKEND_GDOCS (backend)->service;
 
-	title = g_vfs_gdata_file_get_document_id_from_gvfs (filename);
+	title = g_path_get_basename (filename);
 	if (g_strcmp0 (title, "/") == 0)
 	{
 		g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, _("Can't create a root directory"));
@@ -898,7 +898,7 @@ do_push (GVfsBackend *backend, GVfsJobPull *job, const char *destination, const 
 		folder_entry = g_vfs_gdata_file_get_gdata_entry (destination_folder),
 
 	entry = gdata_documents_spreadsheet_new (NULL);
-	destination_filename = g_vfs_gdata_file_get_document_id_from_gvfs (destination);
+	destination_filename = g_path_get_basename (destination);
 	gdata_entry_set_title (GDATA_ENTRY (entry), destination_filename);
 	g_free (destination_filename);
 

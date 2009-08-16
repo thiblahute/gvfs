@@ -48,8 +48,7 @@ typedef struct {
 
 GType g_vfs_gdata_file_get_type (void) G_GNUC_CONST;
 
-gchar *g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path);
-gchar *g_vfs_gdata_file_get_parent_id_from_gvfs (const gchar *path);
+gchar *g_path_get_parent_basename (const gchar *filename);
 GVfsGDataFile *g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_path, GCancellable *cancellable, GError **error);
 GVfsGDataFile *g_vfs_gdata_file_new_folder_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_path, GCancellable *cancellable, GError **error);
 GVfsGDataFile *g_vfs_gdata_file_new_from_gdata (GVfsBackendGdocs *backend, GDataEntry *gdata_entry, GError **error);

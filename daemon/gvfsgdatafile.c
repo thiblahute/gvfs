@@ -67,60 +67,23 @@ convert_slashes (char *str)
 }
 
 /**
- * g_vfs_gdata_file_get_document_id_from_gvfs
- * Gets the id of the document passed as @path.
- * @path a gvfs path
+ * Gets the last component of the parent' filename. If file_name consists only of directory separators 
+ * (and on Windows, possibly a drive letter), a single separator is returned. If file_name is empty, it gets ".".
  *
- * Returns: the #GDataDocumentsEntry::id corresponding to @path, or "/" if it's the root directory
+ * file_name : the name of the file.
+ * 
+ * Returns : a newly allocated string containing the last component of the filename.
  * */
 gchar *
-g_vfs_gdata_file_get_document_id_from_gvfs (const gchar *path)
+g_path_get_parent_basename (const gchar *filename)
 {
-	gchar	**entries_id_array; 
-	
-	gchar	*entry_id = NULL;
-	gint	i = 0;
+	gchar	*parent_filename, *parent_basename;
 
-	if (g_strcmp0 (path, "/") == 0)
-		return g_strdup ("/");
+	parent_filename = g_path_get_dirname (filename);
+	parent_basename = g_path_get_basename (parent_filename);
+	g_free (parent_filename);
 
-	entries_id_array = g_strsplit (path, "/", 0);
-	while (entries_id_array[i] != NULL)
-	{
-		g_free (entry_id);
-		entry_id = g_strdup (entries_id_array[i]);
-		i++;
-	}
-	g_strfreev (entries_id_array);
-
-	return entry_id;
-}
-
-/**
- * Gets the id of the document's direct parent.
- * @path: a gvfs path
- *
- * Returns: the parent entry ID. or "/" if @path's parent is the root directory
- * */
-gchar *
-g_vfs_gdata_file_get_parent_id_from_gvfs (const gchar *path)
-{
-	gchar	**entries_id_array, *entry_id;
-
-	if (strcmp (path, "/") == 0)
-	   return g_strdup ("/");
-
-	entries_id_array = g_strsplit (path, "/", 0);
-	entry_id = g_strdup (entries_id_array [g_strv_length (entries_id_array)-2]);
-
-	if (g_strcmp0 (entry_id, "") == 0)
-	{
-		g_free (entry_id);
-		entry_id = g_strdup ("/");
-	}
-	g_strfreev (entries_id_array);
-
-	return entry_id;
+	return parent_basename;
 }
 
 /**
@@ -189,7 +152,7 @@ g_vfs_gdata_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 	g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
 	g_return_val_if_fail (gvfs_path != NULL, NULL);
 
-	entry_id = g_vfs_gdata_file_get_document_id_from_gvfs (gvfs_path);
+	entry_id = g_path_get_basename (gvfs_path);
 	if (g_strcmp0 (entry_id, "/") == 0)
 	{
 		return g_object_new (G_VFS_TYPE_GDATA_FILE,
@@ -317,7 +280,7 @@ g_vfs_gdata_file_new_parent_from_gvfs (GVfsBackendGdocs *backend, const gchar *g
 	g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
 	g_return_val_if_fail (gvfs_path != NULL, NULL);
 
-	parent_entry_id = g_vfs_gdata_file_get_parent_id_from_gvfs (gvfs_path);
+	parent_entry_id = g_path_get_parent_basename (gvfs_path);
 
 	if (g_strcmp0 (parent_entry_id , "/") == 0)
 	{

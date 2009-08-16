@@ -478,6 +478,57 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
+static void
+do_set_display_name (GVfsBackend *backend,
+                     GVfsJobSetDisplayName *job,
+                     const char *filename,
+                     const char *display_name)
+{	
+	GVfsGDataFile			*file;
+	gchar					*new_path, *dirname;
+	GDataDocumentsEntry		*entry, *renamed_entry;
+
+	GError					*error = NULL;
+	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
+	GDataDocumentsService	*service = G_VFS_BACKEND_GDOCS (backend)->service;
+
+	file = g_vfs_gdata_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
+	if (g_vfs_gdata_file_is_root (file))
+	{
+		g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, _("Can't rename the root directory"));
+		g_object_unref (file);
+	}
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		if (file != NULL)
+			g_object_unref (file);
+		return;
+	}
+	entry = g_vfs_gdata_file_get_gdata_entry (file);
+	gdata_entry_set_title (entry, display_name);
+	
+	renamed_entry = gdata_documents_service_update_document (service, entry, NULL, NULL, &error);
+	if (error != NULL)
+	{
+		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
+		g_object_unref (file);
+		if (renamed_entry != NULL)
+			g_object_unref (renamed_entry);
+		return;
+	}
+	g_object_unref (file);
+	g_object_unref (renamed_entry);
+
+	dirname = g_path_get_dirname (filename);
+	new_path = g_build_filename (dirname, display_name, NULL);
+	g_free (dirname);
+    g_vfs_job_set_display_name_set_new_path (job, new_path);
+    g_vfs_job_succeeded (G_VFS_JOB (job));
+	g_free (new_path);
+}
 
 static void
 do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, GFileAttributeMatcher *matcher,
@@ -1075,5 +1126,6 @@ g_vfs_backend_gdocs_class_init (GVfsBackendGdocsClass *klass)
 	backend_class->write = do_write;
 	backend_class->query_info = do_query_info;
 	backend_class->create = do_create;
+	backend_class->set_display_name = do_set_display_name;
 
 }

@@ -1,0 +1,5 @@
+[Mount]
+Type=gdocs
+Exec=@libexecdir@/gvfsd-gdocs
+AutoMount=true
+DBusName=org.gtk.vfs.mountpoint.gdocs

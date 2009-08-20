@@ -334,7 +334,7 @@ gvfsd_dnssd_CPPFLAGS = \
 gvfsd_dnssd_LDADD = $(libraries) $(AVAHI_LIBS) $(top_builddir)/common/libgvfscommon-dnssd.la
 
 gvfsd_gdocs_SOURCES = \
-	gvfsgdatafile.h gvfsgdatafile.c \
+	gvfsgdocsfile.h gvfsgdocsfile.c \
 	gvfsbackendgdocs.c gvfsbackendgdocs.h \
 	daemon-main.c daemon-main.h \
 	daemon-main-generic.c 

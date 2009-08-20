@@ -55,7 +55,7 @@ struct _GVfsBackendGdocs
 	GVfsBackend	parent_instance;
 
 	GDataDocumentsService *service;
-	GHashTable *entries_type;
+	GHashTable *entries;
 };
 
 void g_vfs_backend_gdocs_rebuild_entries_type (GVfsBackendGdocs *backend, GCancellable *cancellable, GError **error);

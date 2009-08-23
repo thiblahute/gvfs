@@ -90,7 +90,9 @@ g_vfs_backend_gdocs_init (GVfsBackendGdocs *backend)
 /* ************************************************************************* */
 /* public utility functions */
 void
-g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs *backend, GCancellable *cancellable, GError **error)
+g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs *backend, 
+								     GCancellable *cancellable,
+									 GError **error)
 {
 	GList					*i;
 	GDataDocumentsQuery		*query;
@@ -125,7 +127,11 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs *backend, GCancellable *ca
 /* ************************************************************************* */
 /* virtual functions overrides */
 static void
-do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMountSource *mount_source,  gboolean is_automount)
+do_mount (GVfsBackend *backend, 
+		  GVfsJobMount *job,
+		  GMountSpec *mount_spec, 
+		  GMountSource *mount_source,  
+		  gboolean is_automount)
 {
 	gchar				*ask_user, *ask_password, *prompt, *display_name, *full_username;
 	const gchar			*username, *host;
@@ -267,8 +273,13 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 }
 
 void
-do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char *destination, GFileCopyFlags flags,
- 		 GFileProgressCallback progress_callback, gpointer progress_callback_data)
+do_move (GVfsBackend *backend, 
+		 GVfsJobMove *job, 
+		 const char *source,
+		 const char *destination, 
+		 GFileCopyFlags flags,
+ 		 GFileProgressCallback progress_callback, 
+		 gpointer progress_callback_data)
 {
 	GDataDocumentsEntry		*new_entry, *renamed_document;
 	GVfsGDocsFile			*source_file, *destination_folder, *containing_folder;
@@ -458,7 +469,10 @@ do_set_display_name (GVfsBackend *backend,
 }
 
 static void
-do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, GFileAttributeMatcher *matcher,
+do_enumerate (GVfsBackend *backend, 
+			  GVfsJobEnumerate *job,
+			  const char *dirname,
+			  GFileAttributeMatcher *matcher,
 			  GFileQueryInfoFlags query_flags)
 {
 	gchar					*folder_id ;
@@ -539,6 +553,7 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 		}
 		g_free (path);
 		g_free (parent_id);
+        
 	}
 
 	g_free (folder_id);
@@ -546,7 +561,9 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 }
 
 static void
-do_make_directory (GVfsBackend *backend, GVfsJobMakeDirectory *job, const char *filename)
+do_make_directory (GVfsBackend *backend, 
+				   GVfsJobMakeDirectory *job,
+				   const char *filename)
 {
 	gchar					*title;
 	GDataCategory			*folder_category;
@@ -602,7 +619,9 @@ do_make_directory (GVfsBackend *backend, GVfsJobMakeDirectory *job, const char *
 }
 
 static void
-do_open_for_read (GVfsBackend *backend, GVfsJobOpenForRead *job, const char *filename)
+do_open_for_read (GVfsBackend *backend, 
+				  GVfsJobOpenForRead *job,
+				  const char *filename)
 {
 	gchar				*uri;
 	SoupMessage			*msg;
@@ -641,7 +660,11 @@ do_open_for_read (GVfsBackend *backend, GVfsJobOpenForRead *job, const char *fil
 }
 
 static void
-do_read (GVfsBackend *backend, GVfsJobRead *job, GVfsBackendHandle handle, char *buffer, gsize bytes_requested)
+do_read (GVfsBackend *backend, 
+		 GVfsJobRead *job,
+		 GVfsBackendHandle handle, 
+		 char *buffer,
+		 gsize bytes_requested)
 {
 	gssize				n_bytes;
 
@@ -665,14 +688,18 @@ do_read (GVfsBackend *backend, GVfsJobRead *job, GVfsBackendHandle handle, char 
 }
 
 static void
-do_close_read (GVfsBackend *backend, GVfsJobCloseRead *job, GVfsBackendHandle handle)
+do_close_read (GVfsBackend *backend, 
+			   GVfsJobCloseRead *job,
+			   GVfsBackendHandle handle)
 {
 	g_object_unref (handle);
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
 static void
-do_delete (GVfsBackend *backend, GVfsJobDelete *job, const char *filename)
+do_delete (GVfsBackend *backend, 
+		   GVfsJobDelete *job,
+		   const char *filename)
 {
 	GVfsGDocsFile	*file;
 
@@ -704,7 +731,12 @@ do_delete (GVfsBackend *backend, GVfsJobDelete *job, const char *filename)
 }
 
 static void
-do_query_info (GVfsBackend *backend, GVfsJobQueryInfo *job, const char *filename, GFileQueryInfoFlags flags, GFileInfo *info, GFileAttributeMatcher *matcher)
+do_query_info (GVfsBackend *backend, 
+			   GVfsJobQueryInfo *job,
+			   const char *filename, 
+			   GFileQueryInfoFlags flags, 
+			   GFileInfo *info,
+			   GFileAttributeMatcher *matcher)
 {
 	GVfsGDocsFile			*file;
 
@@ -733,7 +765,12 @@ do_query_info (GVfsBackend *backend, GVfsJobQueryInfo *job, const char *filename
 }
 
 static void
-do_replace (GVfsBackend *backend, GVfsJobOpenForWrite *job,	const char *filename, const char *etag,	gboolean make_backup, GFileCreateFlags flags)
+do_replace (GVfsBackend *backend, 
+			GVfsJobOpenForWrite *job,
+			const char *filename, 
+			const char *etag,
+			gboolean make_backup, 
+			GFileCreateFlags flags)
 {
 	GFile					*local_file;
 	GVfsGDocsFile			*file;
@@ -776,8 +813,14 @@ do_replace (GVfsBackend *backend, GVfsJobOpenForWrite *job,	const char *filename
 }
 
 static void
-do_push (GVfsBackend *backend, GVfsJobPull *job, const char *destination, const char *local_path, GFileCopyFlags flags,
-		 gboolean remove_source, GFileProgressCallback progress_callback, gpointer progress_callback_data)
+do_push (GVfsBackend *backend, 
+		 GVfsJobPull *job,
+		 const char *destination, 
+		 const char *local_path, 
+		 GFileCopyFlags flags,
+		 gboolean remove_source, 
+		 GFileProgressCallback progress_callback, 
+		 gpointer progress_callback_data)
 {
 	gchar					*destination_filename;
 	GDataDocumentsEntry		*entry, *new_entry;
@@ -805,11 +848,10 @@ do_push (GVfsBackend *backend, GVfsJobPull *job, const char *destination, const 
 	else
 		folder_entry = g_vfs_gdocs_file_get_document_entry (destination_folder),
 
-/*	entry = gdata_documents_spreadsheet_new (NULL);
+	entry = gdata_documents_spreadsheet_new (NULL);
 	destination_filename = g_path_get_basename (destination);
 	gdata_entry_set_title (GDATA_ENTRY (entry), destination_filename);
 	g_free (destination_filename);
-*/
 
 	g_message ("Destination name:local path %s", local_path);
 	local_file = g_file_new_for_path (local_path);
@@ -833,8 +875,14 @@ do_push (GVfsBackend *backend, GVfsJobPull *job, const char *destination, const 
 }
 
 static void
-do_pull (GVfsBackend *backend, GVfsJobPull *job, const char *source, const char *local_path, GFileCopyFlags flags,
-		gboolean remove_source, GFileProgressCallback progress_callback, gpointer progress_callback_data)
+do_pull (GVfsBackend *backend, 
+		 GVfsJobPull *job,
+		 const char *source, 
+		 const char *local_path, 
+		 GFileCopyFlags flags,
+		 gboolean remove_source, 
+		 GFileProgressCallback progress_callback,
+		 gpointer progress_callback_data)
 {
 	GVfsGDocsFile			*file;
 	GFile					*new_file;
@@ -872,7 +920,10 @@ do_pull (GVfsBackend *backend, GVfsJobPull *job, const char *source, const char 
 }
 
 static void
-do_create (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filename, GFileCreateFlags flags)
+do_create (GVfsBackend *backend, 
+		   GVfsJobOpenForWrite *job,
+		   const char *filename, 
+		   GFileCreateFlags flags)
 {
 	const gchar			*title, *content_type;
 	gchar				*upload_uri;
@@ -924,7 +975,11 @@ do_create (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filename,
 }
 
 static void
-do_write (GVfsBackend *backend, GVfsJobWrite *job,  GVfsBackendHandle _handle, char *buffer, gsize buffer_size)
+do_write (GVfsBackend *backend, 
+		  GVfsJobWrite *job,
+		  GVfsBackendHandle _handle,
+		  char *buffer, 
+		  gsize buffer_size)
 {
 	gssize				n_bytes;
 
@@ -947,7 +1002,9 @@ do_write (GVfsBackend *backend, GVfsJobWrite *job,  GVfsBackendHandle _handle, c
 }
 
 static void
-do_close_write (GVfsBackend *backend, GVfsJobCloseWrite *job, GVfsBackendHandle _handle)
+do_close_write (GVfsBackend *backend, 
+				GVfsJobCloseWrite *job,
+			   	GVfsBackendHandle _handle)
 {
 	g_object_unref (_handle);
 	g_vfs_job_succeeded (G_VFS_JOB (job));

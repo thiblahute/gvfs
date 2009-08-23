@@ -33,8 +33,14 @@
 #include <gdata/gdata.h>
 #include "gvfsgdocsfile.h"
 
-static void g_vfs_gdocs_file_get_property (GObject *object, guint property_id, GValue *value, GParamSpec *pspec);
-static void g_vfs_gdocs_file_set_property (GObject *object, guint property_id, const GValue *value, GParamSpec *pspec);
+static void g_vfs_gdocs_file_get_property (GObject *object, 
+										   guint property_id, 
+										   GValue *value,
+										   GParamSpec *pspec);
+static void g_vfs_gdocs_file_set_property (GObject *object,
+										   guint property_id, 
+										   const GValue *value,
+										   GParamSpec *pspec);
 static void g_vfs_gdocs_file_dispose (GObject *object);
 static void g_vfs_gdocs_file_finalize (GObject *object);
 
@@ -101,7 +107,10 @@ g_path_get_parent_basename (const gchar *filename)
  * An GDataDocumentsServiceError can also be set
  **/
 GVfsGDocsFile *
-g_vfs_gdocs_file_new_folder_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_path, GCancellable *cancellable, GError **error)
+g_vfs_gdocs_file_new_folder_from_gvfs (GVfsBackendGdocs *backend, 
+									   const gchar *gvfs_path, 
+									   GCancellable *cancellable, 
+									   GError **error)
 {
 	GVfsGDocsFile *folder;
    
@@ -138,7 +147,10 @@ g_vfs_gdocs_file_new_folder_from_gvfs (GVfsBackendGdocs *backend, const gchar *g
  * An GDataDocumentsServiceError can also be set 
  **/
 GVfsGDocsFile *
-g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_path, GCancellable *cancellable, GError **error)
+g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs *backend, 
+								const gchar *gvfs_path, 
+								GCancellable *cancellable, 
+								GError **error)
 {
 	gchar					*entry_id;
 	GVfsGDocsFile			*file;
@@ -203,7 +215,9 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
  * if the document_entry is not an handled #GDataDocumentsEntry, a G_IO_ERROR_NOT_FOUND error is set;
  **/
 GVfsGDocsFile *
-g_vfs_gdocs_file_new_from_document_entry (GVfsBackendGdocs *backend, GDataDocumentsEntry *document_entry, GError **error)
+g_vfs_gdocs_file_new_from_document_entry (GVfsBackendGdocs *backend, 
+										  GDataDocumentsEntry *document_entry,
+										  GError **error)
 {
 	gchar *gvfs_path;
 
@@ -239,7 +253,10 @@ g_vfs_gdocs_file_new_from_document_entry (GVfsBackendGdocs *backend, GDataDocume
  * Returns: a new file representing the parent directory of @file
  **/
 GVfsGDocsFile *
-g_vfs_gdocs_file_new_parent (GVfsBackendGdocs *backend, const GVfsGDocsFile *file, GCancellable *cancellable, GError **error)
+g_vfs_gdocs_file_new_parent (GVfsBackendGdocs *backend, 
+							 const GVfsGDocsFile *file,
+							 GCancellable *cancellable, 
+							 GError **error)
 {
 	return g_vfs_gdocs_file_new_parent_from_gvfs (backend, file->priv->gvfs_path, cancellable, error);
 }
@@ -260,7 +277,10 @@ g_vfs_gdocs_file_new_parent (GVfsBackendGdocs *backend, const GVfsGDocsFile *fil
  * If the newly created GVfsGDocsFile is not a folder a G_IO_ERROR_NOT_DIRECTORY error is set.
  */
 GVfsGDocsFile *
-g_vfs_gdocs_file_new_parent_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_path, GCancellable *cancellable, GError **error)
+g_vfs_gdocs_file_new_parent_from_gvfs (GVfsBackendGdocs *backend, 
+									   const gchar *gvfs_path,
+									   GCancellable *cancellable, 
+									   GError **error)
 {
 	GVfsGDocsFile	*parent_folder;
 	gchar			*parent_entry_id, *parent_entry_pseudo_path;
@@ -338,7 +358,10 @@ g_vfs_gdocs_file_get_gvfs_path (const GVfsGDocsFile *file)
 }
 
 GFileInfo *
-g_vfs_gdocs_file_get_info (GVfsGDocsFile *file, GFileInfo *info, GFileAttributeMatcher *matcher, GError **error)
+g_vfs_gdocs_file_get_info (GVfsGDocsFile *file, 
+						   GFileInfo *info,
+						   GFileAttributeMatcher *matcher, 
+						   GError **error)
 {
 	GTimeVal	t;
 	GIcon		*icon;
@@ -465,7 +488,8 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile *file, GFileInfo *info, GFileAttributeM
  * Returns: %TRUE if @a and @b reference the same file.
  **/
 gboolean
-g_vfs_gdocs_file_equal (const GVfsGDocsFile *a, const GVfsGDocsFile *b)
+g_vfs_gdocs_file_equal (const GVfsGDocsFile *a,
+						const GVfsGDocsFile *b)
 {
 	g_return_val_if_fail (G_VFS_IS_GDOCS_FILE (a), FALSE);
 	g_return_val_if_fail (G_VFS_IS_GDOCS_FILE (b), FALSE);
@@ -504,7 +528,9 @@ g_vfs_gdocs_file_is_folder (const GVfsGDocsFile *file)
  * Return: the downloading URI of th file.
  */
 gchar *
-g_vfs_gdocs_file_get_download_uri (GVfsGDocsFile *file, GCancellable *cancellable, GError **error)
+g_vfs_gdocs_file_get_download_uri (GVfsGDocsFile *file, 
+								   GCancellable *cancellable, 
+								   GError **error)
 {
 	
 	GDataDocumentsEntry *entry;
@@ -552,8 +578,12 @@ g_vfs_gdocs_file_get_download_uri (GVfsGDocsFile *file, GCancellable *cancellabl
  * @error :	a GError, or NULL
  */
 GFile *
-g_vfs_gdocs_file_download_file (GVfsGDocsFile *file, gchar **content_type, const gchar *local_path,
-								gboolean replace_file_if_exists, gboolean download_folders, GCancellable *cancellable,
+g_vfs_gdocs_file_download_file (GVfsGDocsFile *file, 
+								gchar **content_type, 
+								const gchar *local_path,
+								gboolean replace_file_if_exists, 
+								gboolean download_folders, 
+								GCancellable *cancellable,
 								GError **error)
 {
 	GDataDocumentsFeed *tmp_feed = NULL;
@@ -664,7 +694,10 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile *file, gchar **content_type, const
 }
 
 static void
-g_vfs_gdocs_file_get_property (GObject *object, guint property_id, GValue *value, GParamSpec *pspec)
+g_vfs_gdocs_file_get_property (GObject *object, 
+							   guint property_id, 
+							   GValue *value, 
+							   GParamSpec *pspec)
 {
 	GVfsGDocsFilePrivate *priv = G_VFS_GDOCS_FILE_GET_PRIVATE (object);
 	switch (property_id)
@@ -681,7 +714,9 @@ g_vfs_gdocs_file_get_property (GObject *object, guint property_id, GValue *value
 	}
 }
 static void
-g_vfs_gdocs_file_set_property (GObject *object, guint property_id, const GValue *value, GParamSpec *pspec)
+g_vfs_gdocs_file_set_property (GObject *object, 
+							   guint property_id, 
+							   const GValue *value, GParamSpec *pspec)
 {
 	GVfsGDocsFilePrivate *priv = G_VFS_GDOCS_FILE_GET_PRIVATE (object);
 	switch (property_id)

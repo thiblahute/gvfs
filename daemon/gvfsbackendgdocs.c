@@ -92,13 +92,12 @@ g_vfs_backend_gdocs_init (GVfsBackendGdocs *backend)
 void
 g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs *backend, GCancellable *cancellable, GError **error)
 {
-	GList					*entries_list, *i;
+	GList					*i;
 	GDataDocumentsQuery		*query;
 	GDataDocumentsFeed		*tmp_feed;
+	GVfsGDocsFile			*root_file;
 
 	GDataDocumentsService	*service = backend->service;
-	
-	entries_list = NULL;
 	
 	/*Get all entries (as feed) on the server*/
 	query = gdata_documents_query_new (NULL);
@@ -113,12 +112,14 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs *backend, GCancellable *ca
 		return;
 	}
 
-	entries_list = gdata_feed_get_entries (GDATA_FEED (tmp_feed));
-	for (i = entries_list; i != NULL; i = i->next)
+	for (i = gdata_feed_get_entries (GDATA_FEED (tmp_feed)); i != NULL; i = i->next)
 	{
 		const gchar *entry_id = gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY (i->data));
 		g_hash_table_insert (backend->entries, entry_id, g_vfs_gdocs_file_new_from_document_entry (backend, GDATA_DOCUMENTS_ENTRY (i->data), NULL));
 	}
+
+	root_file = g_vfs_gdocs_file_new_from_document_entry (backend, NULL, NULL);
+	g_hash_table_insert (backend->entries, "/", root_file);
 }
 
 /* ************************************************************************* */
@@ -612,7 +613,7 @@ do_open_for_read (GVfsBackend *backend, GVfsJobOpenForRead *job, const char *fil
 	GCancellable		*cancellable = G_VFS_JOB (job)->cancellable;
 	GVfsBackendGdocs	*gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 
-	g_message ("OPEN READ\n");
+	g_message ("OPEN READ: %s\n", filename);
 
 	file = g_vfs_gdocs_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
 	if (error != NULL)

@@ -192,7 +192,7 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 }
 
 /**
- * g_vfs_gdocs_file_new_from_gdocs:
+ * g_vfs_gdocs_file_new_from_document_entry:
  * @backend: the gdocs backend this file is to be used on
  * @document_entry: gdocs entry to create the file from
  * @error: a #GError or %NULL
@@ -208,7 +208,12 @@ g_vfs_gdocs_file_new_from_document_entry (GVfsBackendGdocs *backend, GDataDocume
 	gchar *gvfs_path;
 
 	g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
-	g_return_val_if_fail (GDATA_IS_ENTRY (document_entry), NULL);
+
+	/*Root file*/
+	if (document_entry == NULL)
+		return g_object_new (G_VFS_TYPE_GDOCS_FILE, "backend", backend, "document-entry", document_entry, "gvfs-path", "/", NULL);
+
+	g_return_val_if_fail (GDATA_IS_DOCUMENTS_ENTRY (document_entry), NULL);
 
 	if (GDATA_IS_DOCUMENTS_ENTRY (document_entry))
 		gvfs_path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (document_entry));

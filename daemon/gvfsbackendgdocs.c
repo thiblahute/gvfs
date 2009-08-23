@@ -654,6 +654,7 @@ do_read (GVfsBackend *backend, GVfsJobRead *job, GVfsBackendHandle handle, char 
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
 		return;
 	}
 
@@ -666,7 +667,7 @@ do_read (GVfsBackend *backend, GVfsJobRead *job, GVfsBackendHandle handle, char 
 static void
 do_close_read (GVfsBackend *backend, GVfsJobCloseRead *job, GVfsBackendHandle handle)
 {
-	g_object_unref (job);
+	g_object_unref (handle);
 	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
@@ -750,6 +751,7 @@ do_replace (GVfsBackend *backend, GVfsJobOpenForWrite *job,	const char *filename
 				G_IO_ERROR_CANT_CREATE_BACKUP,
 				_("backups not supported yet"));
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+		g_error_free (error);
 		return;
 	}
 

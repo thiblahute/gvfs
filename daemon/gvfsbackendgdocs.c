@@ -803,14 +803,18 @@ do_push (GVfsBackend *backend, GVfsJobPull *job, const char *destination, const 
 	else
 		folder_entry = g_vfs_gdocs_file_get_document_entry (destination_folder),
 
-	entry = gdata_documents_spreadsheet_new (NULL);
+/*	entry = gdata_documents_spreadsheet_new (NULL);
 	destination_filename = g_path_get_basename (destination);
 	gdata_entry_set_title (GDATA_ENTRY (entry), destination_filename);
 	g_free (destination_filename);
+*/
 
+	g_message ("Destination name:local path %s", local_path);
 	local_file = g_file_new_for_path (local_path);
-	new_entry = gdata_documents_service_upload_document (GDATA_DOCUMENTS_SERVICE (service), entry, local_file,
+	new_entry = gdata_documents_service_upload_document (GDATA_DOCUMENTS_SERVICE (service), NULL, local_file,
 														 folder_entry, cancellable, &error);
+	g_message ("Test if working");
+
 	g_object_unref (entry);
 	g_object_unref (local_file);
 	if (new_entry != NULL)
@@ -910,55 +914,6 @@ do_create (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filename,
 
 	output_stream = gdata_upload_stream_new (service, SOUP_METHOD_POST, upload_uri, NULL, title, content_type);
 	g_free (upload_uri);
-	g_object_unref (file_info);
-
-	g_vfs_job_open_for_write_set_can_seek (job, FALSE);
-	g_vfs_job_open_for_write_set_handle (job, output_stream);
-	g_vfs_job_succeeded (G_VFS_JOB (job));
-}
-
-static void
-do_append_to (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filename, GFileCreateFlags flags)
-{
-	GFileInfo				*file_info;
-	gchar					*upload_uri;
-	const gchar				*content_type;
-	GDataEntry				*entry, *slug;
-	GDataUploadStream		*output_stream;
-	GFile					*file ;
-	GVfsGDocsFile			*gdata_file;
-		
-	GError					*error = NULL;
-	GCancellable			*cancellable = G_VFS_JOB (job)->cancellable;
-	GDataDocumentsService	*service = G_VFS_BACKEND_GDOCS (backend)->service;
-
-	gdata_file	= g_vfs_gdocs_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
-	if (error != NULL)
-	{
-		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-		g_error_free (error);
-		return;
-	}
-
-	file = g_file_new_for_path (filename);
-	file_info =  g_file_query_info (file, "standard::display-name,standard::content-type", G_FILE_QUERY_INFO_NONE, NULL, &error);
-	g_object_unref (file);
-	if (error != NULL)
-	{
-		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-		g_error_free (error);
-		if (file_info != NULL)
-			g_object_unref (file_info);
-		return;
-	}
-	content_type = g_file_info_get_content_type (file_info);
-	slug = g_file_info_get_display_name (file_info);
-
-	entry = GDATA_ENTRY (g_vfs_gdocs_file_get_document_entry (gdata_file));
-	upload_uri = gdata_entry_look_up_link (GDATA_ENTRY (entry), GDATA_LINK_EDIT_MEDIA);
-
-	output_stream = gdata_upload_stream_new (service, SOUP_METHOD_PUT, gdata_link_get_uri (upload_uri), entry, slug, content_type);
-
 	g_object_unref (file_info);
 
 	g_vfs_job_open_for_write_set_can_seek (job, FALSE);

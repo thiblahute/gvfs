@@ -154,11 +154,6 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs *backend, const gchar *gvfs_pat
 	entry_id = g_path_get_basename (gvfs_path);
 	if (g_strcmp0 (entry_id, "/") == 0)
 	{
-		return g_object_new (G_VFS_TYPE_GDOCS_FILE,
-							 "backend", backend,
-							 "document-entry", NULL,
-							 "gvfs-path", "/",
-							 NULL);
 	}
 	//g_print ("New from GVFS enry_id: %s\n", entry_id);
 

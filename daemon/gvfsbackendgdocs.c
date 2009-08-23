@@ -126,155 +126,101 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs *backend, GCancellable *ca
 static void
 do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMountSource *mount_source,  gboolean is_automount)
 {
-	gchar				*username, *dummy_host, *tmp, *ask_user, *ask_password, *prompt, *display_name;
-	gboolean			aborted, retval, save_password;
+	gchar				*ask_user, *ask_password, *prompt, *display_name, *full_username;
+	const gchar			*username, *host;
+	gboolean			aborted, retval;
 	GMountSpec			*gdocs_mount_spec;
 	GAskPasswordFlags	flags;
-	guint				mount_try;
 
 	GPasswordSave		password_save = G_PASSWORD_SAVE_NEVER;
 	GVfsBackendGdocs	*gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 	GError				*error = NULL;
 	
-	prompt = NULL;
-	prompt = NULL;
-	dummy_host = NULL;
-	tmp = NULL;
-	save_password = FALSE;	
-
 	/*Get usename*/
-	username = g_strdup (g_mount_spec_get (mount_spec, "user"));
-	tmp = dummy_host = g_strdup (g_mount_spec_get (mount_spec, "host"));
+	username = g_mount_spec_get (mount_spec, "user");
+	g_message ("Mounting %s @ %s\n", username, host);
+	host = g_mount_spec_get (mount_spec, "host");
+	if (host == NULL)
+		host = "gmail.com";
 
 
-	g_message ("Mounting\n");
 	/*Set the password asking flags.*/
-	if (!username)
-		flags = G_ASK_PASSWORD_NEED_USERNAME;
-	else
-	{
-		flags =  G_ASK_PASSWORD_NEED_PASSWORD;
-		if (g_vfs_keyring_is_available ())
+	flags =  G_ASK_PASSWORD_NEED_PASSWORD;
+	if (g_vfs_keyring_is_available ())
 			flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
-	}
+	if (username == NULL)
+		flags |= G_ASK_PASSWORD_NEED_USERNAME;
 
-	if (username)
+	if (username != NULL)
 	{
-		/*Check if the password as already been saved for the user*/
-		if (!g_vfs_keyring_lookup_password (username, NULL, NULL, "gdata", NULL, NULL, 0, &ask_user, NULL, &ask_password))
+		/*Check if the password as already been saved for the user, we set the protocol as gdata can be shared by variours google services*/
+		if (!g_vfs_keyring_lookup_password (username, host, NULL, "gdata", NULL, NULL, 0, &ask_user, NULL, &ask_password))
 		{
 			prompt = g_strdup_printf (_("Enter %s's google documents password"), username);
-			if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &ask_user,	NULL, FALSE,
-						&password_save))
+			if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &ask_user,
+											  NULL, FALSE, &password_save) || aborted)
 			{
-				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Password access issue"));
-				g_free (username);
+				if (aborted)
+					g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
+				else
+					g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Password access issue"));
 				g_free (ask_user);
 				g_free (ask_password);
 				g_free (prompt);
 
 				return;
 			}
-			if (aborted)
-			{
-				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
-				g_free (username);
-				g_free (ask_user);
-				g_free (ask_password);
-				g_free (prompt);
-				return;
-			}	
 
-			save_password = TRUE;
-			ask_user = g_strdup (username);
 			g_free (prompt);
 		}
 	}
 	else
 	{
-		prompt = g_strdup ("Enter a username to access google documents.");
+		prompt =  "Enter username and password to access google documents.";
 		if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &ask_user,	NULL, FALSE,
-					&password_save))
+					&password_save) || aborted)
 		{
-			g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Ask password issue"));
-			g_free (username);
-			g_free (ask_user);
-			g_free (prompt);
-			g_free (ask_password);
-			return;
-		}
-		if (aborted)
-		{
-			g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
-			g_free (username);
-			g_free (ask_user);
-			g_free (ask_password);
-			g_free (prompt);
-			return;
-		}	
-		g_free (prompt);
-		username = g_strdup (ask_user);
-		if (!g_vfs_keyring_lookup_password (username, NULL, NULL, "gdata", NULL, NULL, 0, &ask_user, NULL, &ask_password))
-		{
-			/*Set password asking prompt and flags*/
-			prompt = g_strdup_printf (_("Enter %s's google documents password"), username);
-			flags = G_ASK_PASSWORD_NEED_PASSWORD;
-			if (g_vfs_keyring_is_available ())
-				flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
-
-			if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &username,	NULL, FALSE,
-						&password_save))
-			{
-				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Ask password issue"));
-				g_free (username);
-				g_free (ask_user);
-				g_free (ask_password);
-				g_free (prompt);
-				return;
-			}
 			if (aborted)
-			{
 				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
-				g_free (username);
-				g_free (ask_user);
-				g_free (ask_password);
-				g_free (prompt);
-				return;
-			}	
-			save_password = TRUE;
+			else
+				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Password access issue"));
+
+			g_free (ask_user);
 			g_free (prompt);
+			g_free (ask_password);
+			return;
 		}
+
 	}
 
-	mount_try = 0;
-	/*Try to connect to the server*/
-	while (mount_try < 3) /*TODO find something better than 3 tries hard coded*/
+	if (ask_user == NULL)
 	{
-		g_message ("-> Username: %s\n", ask_user);
+		full_username = g_strdup_printf ("%s@%s", username, host);
+		ask_user = g_strdup (username);
+	}
+	else
+		full_username = g_strdup_printf ("%s@%s", ask_user, host);
+
+	/*Try to connect to the server*/
+	while (TRUE)
+	{
+		g_message ("-> Username: %s\n", full_username);
 		g_message ("password: ***\n");
-		retval = gdata_service_authenticate (GDATA_SERVICE (gdocs_backend->service), ask_user, ask_password, NULL, &error);
+		retval = gdata_service_authenticate (GDATA_SERVICE (gdocs_backend->service), full_username, ask_password, NULL, &error);
 		if (retval == TRUE)
 		{
 			/*save the password*/
-			if (save_password == TRUE)
-			{
-				g_vfs_keyring_save_password (username, NULL, NULL, "gdata", NULL, NULL, 0,
-						ask_password, password_save);
-			}
+			g_vfs_keyring_save_password (username, NULL, NULL, "gdata", NULL, NULL, 0, ask_password, password_save);
 
-			if (dummy_host == NULL)
-				dummy_host = "gdocs.com";
 
 			/*Mount it*/
 			gdocs_mount_spec= g_mount_spec_new ("gdocs");
 			g_mount_spec_set (gdocs_mount_spec, "user", ask_user);
-			g_mount_spec_set (gdocs_mount_spec, "host", dummy_host);
+			g_mount_spec_set (gdocs_mount_spec, "host", host);
 
-			display_name = g_strdup_printf (_("%s@%s's google documents"), ask_user, dummy_host);
+			display_name = g_strconcat (full_username, "'s google documents");
 			g_vfs_backend_set_display_name (backend, display_name);
 			g_free (display_name);
-			g_free (tmp);
-			g_free (ask_user);
 
 			g_vfs_backend_set_mount_spec (backend, gdocs_mount_spec);
 			g_mount_spec_unref (gdocs_mount_spec);
@@ -287,41 +233,27 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 			prompt = g_strdup_printf (_("Enter %s's google documents password"), username);
 			if (g_vfs_keyring_is_available ())
 				flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
+
 			if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &username,	NULL, FALSE,
-						&password_save))
+						&password_save) || aborted)
 			{
-				g_message ("Ask password issue");
-				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Ask password issue"));	
-				g_free (username);
+				if (aborted)
+					g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
+				else
+					g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Password access issue"));
 				g_free (ask_password);
 				g_free (prompt);
 				return;
 			}
-			if (aborted)
-			{
-				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
-				g_free (username);
-				g_free (ask_user);
-				g_free (ask_password);
-				g_free (prompt);
-				return;
-		}	
-			save_password = TRUE;
+
 			g_free (prompt);
 		}
-		mount_try++;
 	}
 
-	g_free (username);
 	g_free (ask_password);
 
-	if (retval == FALSE)
-		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-	else
-	{
-		g_message ("===Connected\n");
-		g_vfs_job_succeeded (G_VFS_JOB (job));
-	}
+	g_message ("===Connected\n");
+	g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
 void
@@ -354,8 +286,6 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (source_file != NULL)
-			g_object_unref (source_file);
 		return;
 	}
 
@@ -414,12 +344,10 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 			g_error_free (error);
-			g_object_unref (source_file);
 			g_object_unref (destination_folder);
 			return;
 		}
 
-		g_object_unref (source_file);
 	}
 	g_free (destination_parent_id);
 	/*if (destination_folder != NULL)
@@ -434,9 +362,6 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 			g_error_free (error);
-			g_object_unref (source_file);
-			if (containing_folder != NULL)
-				g_object_unref (containing_folder);
 			return;
 		}
 		g_message ("Moving %s out of %s", gdata_documents_entry_get_document_id (g_vfs_gdocs_file_get_document_entry (source_file)),
@@ -445,8 +370,6 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 																		 GDATA_DOCUMENTS_ENTRY (g_vfs_gdocs_file_get_document_entry (source_file)),
 																		 g_vfs_gdocs_file_get_document_entry (containing_folder),
 																		 cancellable, &error);
-		g_object_unref (source_file);
-		g_object_unref (containing_folder);
 		if (error != NULL)
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -471,7 +394,6 @@ do_move (GVfsBackend *backend, GVfsJobMove *job, const char *source, const char 
 		{
 			g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 			g_error_free (error);
-			g_object_unref (source_file);
 			return;
 		}
 	}
@@ -496,14 +418,11 @@ do_set_display_name (GVfsBackend *backend,
 	if (g_vfs_gdocs_file_is_root (file))
 	{
 		g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, _("Can't rename the root directory"));
-		g_object_unref (file);
 	}
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (file != NULL)
-			g_object_unref (file);
 		return;
 	}
 	entry = g_vfs_gdocs_file_get_document_entry (file);
@@ -514,12 +433,10 @@ do_set_display_name (GVfsBackend *backend,
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		g_object_unref (file);
 		if (renamed_entry != NULL)
 			g_object_unref (renamed_entry);
 		return;
 	}
-	g_object_unref (file);
 
 	dirname = g_path_get_dirname (filename);
 	new_path = g_build_filename (dirname, gdata_documents_entry_get_document_id (renamed_entry), NULL);
@@ -591,9 +508,9 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 			{
 				g_free (path);
 				g_free (parent_id);
-				if (file != NULL)
-					g_object_unref (file);
 				g_clear_error (&error);
+				if (file =! NULL)
+					g_object_unref (file);
 				continue;
 			}
 
@@ -603,13 +520,12 @@ do_enumerate (GVfsBackend *backend, GVfsJobEnumerate *job, const char *dirname, 
 				g_free (path);
 				g_free (parent_id);
 				g_clear_error (&error);
-				if (file != NULL)
-					g_object_unref (file);
+				g_object_unref (file);
 				continue;
 			}
 				
-			g_vfs_job_enumerate_add_info (job, info);
 			g_object_unref (file);
+			g_vfs_job_enumerate_add_info (job, info);
 		}
 		g_free (path);
 		g_free (parent_id);
@@ -694,8 +610,6 @@ do_open_for_read (GVfsBackend *backend, GVfsJobOpenForRead *job, const char *fil
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (file != NULL)
-			g_object_unref (file);
 		return;
 	}
 
@@ -704,15 +618,12 @@ do_open_for_read (GVfsBackend *backend, GVfsJobOpenForRead *job, const char *fil
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (file != NULL)
-			g_object_unref (file);
 		g_free (uri);
 		return;
 	}
 
 	stream = gdata_download_stream_new (GDATA_SERVICE (gdocs_backend->service), uri);
 	g_free (uri);
-	g_object_unref (file);
 
 	g_vfs_job_open_for_read_set_handle (job, stream);
 	g_vfs_job_open_for_read_set_can_seek (job, FALSE);
@@ -764,8 +675,6 @@ do_delete (GVfsBackend *backend, GVfsJobDelete *job, const char *filename)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (file != NULL)
-			g_object_unref (file);
 		return;
 	}
 
@@ -776,8 +685,6 @@ do_delete (GVfsBackend *backend, GVfsJobDelete *job, const char *filename)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (file != NULL)
-			g_object_unref (file);
 		return;
 	}
 	g_message ("%s :deleted\n", gdata_entry_get_title (g_vfs_gdocs_file_get_document_entry (file)));
@@ -798,8 +705,6 @@ do_query_info (GVfsBackend *backend, GVfsJobQueryInfo *job, const char *filename
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (file != NULL)
-			g_object_unref (file);
 		return;
 	}
 
@@ -808,8 +713,6 @@ do_query_info (GVfsBackend *backend, GVfsJobQueryInfo *job, const char *filename
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (file != NULL)
-			g_object_unref (file);
 		if (info != NULL)
 			g_object_unref (info);
 		return;
@@ -845,8 +748,6 @@ do_replace (GVfsBackend *backend, GVfsJobOpenForWrite *job,	const char *filename
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (file != NULL)
-			g_object_unref (file);
 		return;
 	}
 
@@ -857,8 +758,6 @@ do_replace (GVfsBackend *backend, GVfsJobOpenForWrite *job,	const char *filename
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (file != NULL)
-			g_object_unref (file);
 		g_object_unref (local_file);
 		return;
 	}
@@ -883,15 +782,12 @@ do_push (GVfsBackend *backend, GVfsJobPull *job, const char *destination, const 
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (destination_folder != NULL)
-			g_object_unref (destination_folder);
 		g_object_unref (local_file);
 		return;
 	}
 
 	if (g_vfs_gdocs_file_is_root (destination_folder))
 	{
-		g_object_unref (destination_folder);
 		destination_folder = NULL;
 	}
 	else
@@ -906,8 +802,6 @@ do_push (GVfsBackend *backend, GVfsJobPull *job, const char *destination, const 
 	new_entry = gdata_documents_service_upload_document (GDATA_DOCUMENTS_SERVICE (service), entry, local_file,
 														 folder_entry, cancellable, &error);
 	g_object_unref (entry);
-	if (destination_folder != NULL)
-		g_object_unref (destination_folder);
 	g_object_unref (local_file);
 	if (new_entry != NULL)
 		g_object_unref (new_entry);
@@ -940,8 +834,6 @@ do_pull (GVfsBackend *backend, GVfsJobPull *job, const char *source, const char 
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (file != NULL)
-			g_object_unref (file);
 		return;
 	}
 
@@ -949,7 +841,6 @@ do_pull (GVfsBackend *backend, GVfsJobPull *job, const char *source, const char 
 		replace_if_exists = TRUE;
 
 	new_file = g_vfs_gdocs_file_download_file (file, &content_type, local_path, replace_if_exists, TRUE, cancellable, &error);
-	g_object_unref (file);
 	if (new_file != NULL)
 		g_object_unref (new_file);
 
@@ -996,15 +887,13 @@ do_create (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filename,
 	content_type = g_file_info_get_content_type (file_info);
 	title = g_file_info_get_display_name (file_info);
 
-	parent_folder =g_vfs_gdocs_file_new_parent_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
+	parent_folder = g_vfs_gdocs_file_new_parent_from_gvfs (G_VFS_BACKEND_GDOCS (backend), filename, cancellable, &error);
 	if (error != NULL)
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
 		if (file_info != NULL)
 			g_object_unref (file_info);
-		if (parent_folder != NULL)
-			g_object_unref (parent_folder);
 		return;
 	}
 	upload_uri = gdata_documents_service_get_upload_uri (GDATA_DOCUMENTS_FOLDER (g_vfs_gdocs_file_get_document_entry (parent_folder)));
@@ -1038,8 +927,6 @@ do_append_to (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filena
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		if (gdata_file != NULL)
-			g_object_unref (gdata_file);
 		return;
 	}
 
@@ -1050,7 +937,6 @@ do_append_to (GVfsBackend *backend, GVfsJobOpenForWrite *job, const char *filena
 	{
 		g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
 		g_error_free (error);
-		g_object_unref (gdata_file);
 		if (file_info != NULL)
 			g_object_unref (file_info);
 		return;

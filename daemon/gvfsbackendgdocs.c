@@ -132,16 +132,23 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 	GMountSpec			*gdocs_mount_spec;
 	GAskPasswordFlags	flags;
 
-	GPasswordSave		password_save = G_PASSWORD_SAVE_NEVER;
+	GPasswordSave		password_save_flags = G_PASSWORD_SAVE_NEVER;
 	GVfsBackendGdocs	*gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 	GError				*error = NULL;
 	
 	/*Get usename*/
 	username = g_mount_spec_get (mount_spec, "user");
-	g_message ("Mounting %s @ %s\n", username, host);
 	host = g_mount_spec_get (mount_spec, "host");
+	g_message ("Mounting %s @ %s\n", username, host);
+
+	/*We want an uri like gdocs://a_username to work*/
 	if (host == NULL)
 		host = "gmail.com";
+	else if (username == NULL)
+	{
+		username = host;
+		host = "gmail.com";
+	}
 
 
 	/*Set the password asking flags.*/
@@ -156,9 +163,9 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 		/*Check if the password as already been saved for the user, we set the protocol as gdata can be shared by variours google services*/
 		if (!g_vfs_keyring_lookup_password (username, host, NULL, "gdata", NULL, NULL, 0, &ask_user, NULL, &ask_password))
 		{
-			prompt = g_strdup_printf (_("Enter %s's google documents password"), username);
+			prompt = g_strdup_printf (_("Enter %s@%s's google documents password"), username, host);
 			if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &ask_user,
-											  NULL, FALSE, &password_save) || aborted)
+											  NULL, FALSE, &password_save_flags) || aborted)
 			{
 				if (aborted)
 					g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
@@ -176,12 +183,12 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 	}
 	else
 	{
-		prompt =  "Enter username and password to access google documents.";
+		prompt =  g_strdup ("Enter username and password to access google documents.");
 		if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &ask_user,	NULL, FALSE,
-					&password_save) || aborted)
+					&password_save_flags) || aborted)
 		{
 			if (aborted)
-				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
+				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Password dialog cancelled"));
 			else
 				g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Password access issue"));
 
@@ -190,7 +197,7 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 			g_free (ask_password);
 			return;
 		}
-
+		g_free (prompt);
 	}
 
 	if (ask_user == NULL)
@@ -210,16 +217,16 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 		if (retval == TRUE)
 		{
 			/*save the password*/
-			g_vfs_keyring_save_password (username, NULL, NULL, "gdata", NULL, NULL, 0, ask_password, password_save);
-
+			g_vfs_keyring_save_password (username, host, NULL, "gdata", NULL, NULL, 0, ask_password, password_save_flags);
 
 			/*Mount it*/
 			gdocs_mount_spec= g_mount_spec_new ("gdocs");
 			g_mount_spec_set (gdocs_mount_spec, "user", ask_user);
 			g_mount_spec_set (gdocs_mount_spec, "host", host);
 
-			display_name = g_strconcat (full_username, "'s google documents");
+			display_name = g_strdup_printf ("%s's google documents", full_username);
 			g_vfs_backend_set_display_name (backend, display_name);
+			g_message ("Mounting user: %s, host: %s, display_name: %s", ask_user, host, display_name);
 			g_free (display_name);
 
 			g_vfs_backend_set_mount_spec (backend, gdocs_mount_spec);
@@ -230,18 +237,19 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 		else
 		{
 			flags = G_ASK_PASSWORD_NEED_PASSWORD;
-			prompt = g_strdup_printf (_("Enter %s's google documents password"), username);
+			prompt = g_strdup_printf (_("Enter %s's google documents password"), full_username);
 			if (g_vfs_keyring_is_available ())
 				flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
 
-			if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, &username,	NULL, FALSE,
-						&password_save) || aborted)
+			if (!g_mount_source_ask_password (mount_source, prompt, username, NULL, flags, &aborted, &ask_password, NULL, NULL, FALSE,
+						&password_save_flags) || aborted)
 			{
 				if (aborted)
 					g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, _("Password dialog cancelled"));
 				else
 					g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR, G_IO_ERROR_FAILED, _("Password access issue"));
 				g_free (ask_password);
+				g_free (full_username);
 				g_free (prompt);
 				return;
 			}
@@ -250,10 +258,11 @@ do_mount (GVfsBackend *backend, GVfsJobMount *job, GMountSpec *mount_spec, GMoun
 		}
 	}
 
+	g_free (full_username);
 	g_free (ask_password);
 
-	g_message ("===Connected\n");
 	g_vfs_job_succeeded (G_VFS_JOB (job));
+	g_message ("===Connected\n");
 }
 
 void

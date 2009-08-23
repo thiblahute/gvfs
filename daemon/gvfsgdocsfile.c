@@ -25,8 +25,6 @@
  * @short_description: This class maps between GVfs paths and the actual entry google server.
  * @stability: Unstable
  * @include: daemon/gvfsdatafile.h
- *
- * TODO: handle picasaweb files
  */
 
 #include <glib/gstdio.h>

@@ -1,5 +1,5 @@
 /* GIO - GLib Input, Output and Streaming Library
- * 
+ *
  * Copyright (C) Thibault Saunier 2009 <saunierthibault@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -47,20 +47,19 @@ GType g_vfs_backend_gdocs_get_type (void) G_GNUC_CONST;
 
 struct _GVfsBackendGdocsClass
 {
-	GVfsBackendClass parent_class;
+    GVfsBackendClass parent_class;
 };
 
 struct _GVfsBackendGdocs
 {
-	GVfsBackend	parent_instance;
-
-	GDataDocumentsService *service;
-	GHashTable *entries;
+    GVfsBackend				parent_instance;
+    GDataDocumentsService	*service;
+    GHashTable				*entries;
 };
 
-void g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs *backend, 
-										  GCancellable *cancellable, 
-										  GError **error);
+void g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs *backend,
+                                          GCancellable *cancellable,
+                                          GError **error);
 
 G_END_DECLS
 

@@ -138,6 +138,7 @@ g_vfs_ftp_dir_cache_lookup_entry (GVfsFtpDirCache *  cache,
   g_mutex_lock (cache->lock);
   entry = g_hash_table_lookup (cache->directories, dir);
   if (entry)
+  {
     g_vfs_ftp_dir_cache_entry_ref (entry);
   g_mutex_unlock (cache->lock);
   if (entry && entry->stamp < stamp)

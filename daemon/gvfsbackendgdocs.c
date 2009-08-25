@@ -124,7 +124,9 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
         const gchar *entry_id = gdata_documents_entry_get_document_id (document_entry);
         g_hash_table_insert (backend->entries,
                              entry_id,
-                             g_vfs_gdocs_file_new_from_document_entry (backend, document_entry, NULL));
+                             g_vfs_gdocs_file_new_from_document_entry (backend, 
+                                                                       document_entry, 
+                                                                       NULL));
       }
 
     /*We add the root folder so we don't have problem querying it afterward*/

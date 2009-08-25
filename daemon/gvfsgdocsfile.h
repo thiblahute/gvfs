@@ -38,8 +38,8 @@ G_BEGIN_DECLS
 typedef struct _GVfsGDocsFilePrivate GVfsGDocsFilePrivate;
 
 typedef struct{
-    GObject parent;
-    GVfsGDocsFilePrivate *priv;
+    GObject                 parent;
+    GVfsGDocsFilePrivate    *priv;
 }GVfsGDocsFile;
 
 typedef struct {
@@ -48,61 +48,66 @@ typedef struct {
 
 GType g_vfs_gdocs_file_get_type (void) G_GNUC_CONST;
 
-gchar                    *g_path_get_parent_basename (const gchar *filename);
+gchar                *g_path_get_parent_basename (const gchar   *filename);
 
-GVfsGDocsFile            *g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs *backend,
-                                                         const gchar *gvfs_path,
-                                                         GCancellable *cancellable,
-                                                         GError **error);
+GVfsGDocsFile        *g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs  *backend,
+                                                      const gchar        *gvfs_path,
+                                                      GCancellable       *cancellable,
+                                                      GError             **error);
 
-GVfsGDocsFile            *g_vfs_gdocs_file_new_folder_from_gvfs (GVfsBackendGdocs *backend,
-                                                                const gchar *gvfs_path,
-                                                                GCancellable *cancellable,
-                                                                GError **error);
+GVfsGDocsFile        *g_vfs_gdocs_file_new_folder_from_gvfs (
+                                            GVfsBackendGdocs    *backend,
+                                            const gchar         *gvfs_path,
+                                            GCancellable        *cancellable,
+                                            GError              **error);
 
-GVfsGDocsFile            *g_vfs_gdocs_file_new_from_document_entry (GVfsBackendGdocs *backend,
-                                                                   GDataDocumentsEntry *document_entry,
-                                                                   GError **error);
+GVfsGDocsFile        *g_vfs_gdocs_file_new_from_document_entry (
+                                            GVfsBackendGdocs    *backend,
+                                            GDataDocumentsEntry *document_entry,
+                                            GError              **error);
 
-GVfsGDocsFile            *g_vfs_gdocs_file_new_parent (GVfsBackendGdocs *backend,
-                                                      const GVfsGDocsFile *file,
-                                                      GCancellable *cancellable,
-                                                      GError **error);
+GVfsGDocsFile        *g_vfs_gdocs_file_new_parent (GVfsBackendGdocs     *backend,
+                                                   const GVfsGDocsFile  *file,
+                                                   GCancellable         *cancellable,
+                                                   GError               **error);
 
-GVfsGDocsFile            *g_vfs_gdocs_file_new_parent_from_gvfs (GVfsBackendGdocs *backend,
-                                                                const gchar *gvfs_path,
-                                                                GCancellable *cancellable,
-                                                                GError **error);
+GVfsGDocsFile        *g_vfs_gdocs_file_new_parent_from_gvfs (
+                                                        GVfsBackendGdocs    *backend,
+                                                        const gchar         *gvfs_path,
+                                                        GCancellable        *cancellable,
+                                                        GError              **error);
 
-gboolean                g_vfs_gdocs_file_is_root (const GVfsGDocsFile *file);
+gboolean             g_vfs_gdocs_file_is_root (const GVfsGDocsFile *file);
 
-GDataDocumentsEntry        *g_vfs_gdocs_file_get_document_entry (const GVfsGDocsFile *file);
+GDataDocumentsEntry  *g_vfs_gdocs_file_get_document_entry (const GVfsGDocsFile *file);
 
-const gchar                *g_vfs_gdocs_file_get_gvfs_path (const GVfsGDocsFile *file);
+const gchar          *g_vfs_gdocs_file_get_gvfs_path (const GVfsGDocsFile *file);
 
-GVfsBackendGdocs        *g_vfs_gdocs_file_get_backend (const GVfsGDocsFile *file);
+GVfsBackendGdocs     *g_vfs_gdocs_file_get_backend (const GVfsGDocsFile *file);
 
 gboolean                g_vfs_gdocs_file_equal (const GVfsGDocsFile *a,
                                                 const GVfsGDocsFile *b);
 
-GFileInfo                *g_vfs_gdocs_file_get_info (GVfsGDocsFile *file,
-                                                    GFileInfo *info,
-                                                    GFileAttributeMatcher *matcher,
-                                                    GError **error);
+GFileInfo                *g_vfs_gdocs_file_get_info (GVfsGDocsFile          *file,
+                                                    GFileInfo               *info,
+                                                    GFileAttributeMatcher   *matcher,
+                                                    GError                  **error);
 
 gboolean                g_vfs_gdocs_file_is_folder (const GVfsGDocsFile *file);
 
-GFile                    *g_vfs_gdocs_file_download_file (GVfsGDocsFile *file,
-                                                         gchar **content_type,
-                                                         const gchar *local_path,
-                                                         gboolean replace_file_if_exists,
-                                                         gboolean download_folders,
-                                                         GCancellable *cancellable,
-                                                         GError **error);
+GFile                    *g_vfs_gdocs_file_download_file (
+                                            GVfsGDocsFile       *file,
+                                            gchar               **content_type,
+                                            const gchar         *local_path,
+                                            gboolean            replace_file_if_exists,
+                                            gboolean            download_folders,
+                                            GCancellable        *cancellable,
+                                            GError              **error);
 
-gchar                    *g_vfs_gdocs_file_get_download_uri (GVfsGDocsFile *file,
-                                                            GCancellable *cancellable,
-                                                            GError **error);
+gchar                    *g_vfs_gdocs_file_get_download_uri (
+                                                        GVfsGDocsFile   *file,
+                                                        GCancellable    *cancellable,
+                                                        GError          **error);
 
 G_END_DECLS
 

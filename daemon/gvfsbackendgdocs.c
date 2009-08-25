@@ -52,8 +52,6 @@
 #include "gvfsdaemonprotocol.h"
 #include "gvfskeyring.h"
 
-#include "soup-input-stream.h"
-
 G_DEFINE_TYPE (GVfsBackendGdocs, g_vfs_backend_gdocs, G_VFS_TYPE_BACKEND)
 
 static void
@@ -183,8 +181,9 @@ do_mount (GVfsBackend   *backend,
 
     if (username != NULL)
       {
-        /* Check if the password as already been saved for the user, we set the protocol as
-         * gdata can be shared by variours google services*/
+        /* Check if the password as already been saved for the user, 
+         * we set the protocol as gdata can be shared by variours google services
+         **/
         if (!g_vfs_keyring_lookup_password (username,
                                             host,
                                             NULL,
@@ -196,7 +195,9 @@ do_mount (GVfsBackend   *backend,
                                             NULL,
                                             &ask_password))
           {
-            prompt = g_strdup_printf (_("Enter %s@%s's google documents password"), username, host);
+            prompt = g_strdup_printf (_("Enter %s@%s's google documents password"), 
+                                      username, 
+                                      host);
             if (!g_mount_source_ask_password (mount_source,
                                               prompt,
                                               username,
@@ -437,8 +438,8 @@ do_move (GVfsBackend            *backend,
                                                 cancellable,
                                                 &error);
 
-        /* If the destination is not a folder and the parent of the destination is the root,
-         * we rename the source file*/
+        /* If the destination is not a folder and the parent of the destination
+         *  is the root, we rename the source file*/
         if (g_error_matches (error,
                              G_IO_ERROR,
                              G_IO_ERROR_NOT_DIRECTORY)

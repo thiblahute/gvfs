@@ -1,10 +1,6 @@
 AC_INIT(client/gdaemonvfs.h)
 
-<<<<<<< HEAD:configure.ac
-AM_INIT_AUTOMAKE(gvfs, 1.3.5)
-=======
 AM_INIT_AUTOMAKE(gvfs, 1.3.6)
->>>>>>> e4524317a54e912a9144677a1bb3fcec4ebe4169:configure.ac
 AM_CONFIG_HEADER(config.h)
 
 AM_SANITY_CHECK

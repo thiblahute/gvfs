@@ -171,7 +171,7 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
     entry_id = g_path_get_basename (gvfs_path);
 
     /* if the GHashTable which make the link between an entry-id and a type is empty,
-     *  we build it
+     * we build it
      **/
     if (g_hash_table_size (backend->entries) == 0)
       {
@@ -456,7 +456,10 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *file,
     if (*display_name->str == '.')
         g_file_info_set_is_hidden (info, TRUE);
 
-    if (g_strstr_len (display_name->str, strlen (display_name), "\357\277\275") != NULL)
+    if (g_strstr_len (display_name->str, 
+                      strlen (display_name),
+                      "\357\277\275") 
+             != NULL)
         g_string_append (display_name, " (invalid encoding)");
     else
       {
@@ -482,7 +485,7 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *file,
     if (g_file_attribute_matcher_matches (matcher, 
                                           G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE) 
             || g_file_attribute_matcher_matches (matcher, 
-                                                 G_FILE_ATTRIBUTE_STANDARD_ICON))
+                                          G_FILE_ATTRIBUTE_STANDARD_ICON))
       {
         icon = NULL;
 
@@ -503,7 +506,9 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *file,
                                           G_FILE_ATTRIBUTE_ETAG_VALUE))
       {
         const gchar *etag = gdata_entry_get_etag (file->priv->document_entry);
-        g_file_info_set_attribute_string (info, G_FILE_ATTRIBUTE_ETAG_VALUE, etag);
+        g_file_info_set_attribute_string (info, 
+                                          G_FILE_ATTRIBUTE_ETAG_VALUE, 
+                                          etag);
       }
     g_string_free (display_name, TRUE);
 
@@ -580,9 +585,10 @@ g_vfs_gdocs_file_get_download_uri (GVfsGDocsFile    *file,
     else if (GDATA_IS_DOCUMENTS_SPREADSHEET (entry))
       {
         GDataDocumentsSpreadsheet *spreadsheet = GDATA_DOCUMENTS_SPREADSHEET (entry);
-        return gdata_documents_spreadsheet_get_download_uri (spreadsheet,
-                                                             GDATA_DOCUMENTS_SPREADSHEET_ODS, 
-                                                             -1);
+        return gdata_documents_spreadsheet_get_download_uri (
+                                                spreadsheet,
+                                                GDATA_DOCUMENTS_SPREADSHEET_ODS, 
+                                                -1);
       }
     else if (GDATA_IS_DOCUMENTS_TEXT (entry))
       {
@@ -591,12 +597,17 @@ g_vfs_gdocs_file_get_download_uri (GVfsGDocsFile    *file,
       }
     else if (GDATA_IS_DOCUMENTS_PRESENTATION (entry))
       {
-        return gdata_documents_presentation_get_download_uri (GDATA_DOCUMENTS_PRESENTATION (entry), GDATA_DOCUMENTS_PRESENTATION_PPT);
+        return gdata_documents_presentation_get_download_uri (
+                                                GDATA_DOCUMENTS_PRESENTATION (entry),
+                                                GDATA_DOCUMENTS_PRESENTATION_PPT);
       }
     else
       {
-        g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
-                _("%s is not a supported document type"), g_vfs_gdocs_file_get_gvfs_path (file));
+        g_set_error (error, 
+                     G_IO_ERROR, 
+                     G_IO_ERROR_NOT_SUPPORTED,
+                     _("%s is not a supported document type"), 
+                     g_vfs_gdocs_file_get_gvfs_path (file));
         g_object_unref (file);
         return NULL;
       }
@@ -605,11 +616,15 @@ g_vfs_gdocs_file_get_download_uri (GVfsGDocsFile    *file,
 /* g_vfs_gdocs_file_download_file
  *
  * @file: a GVfsGDocsFile file
- * @content_type: return location for the document's content type, or NULL; free with g_free()
+ * @content_type: return location for the document's content type, or NULL;
+ *                free with g_free()
  * @export_format: the format in which the presentation should be exported
- * @destination_directory :    the directory into which the presentation file should be saved
- * @replace_file_if_exists : %TRUE if the file should be replaced if it already exists, %FALSE otherwise
- * @download_folders: %TRUE if you want to download all the directory three, otherwise %FALSE
+ * @destination_directory :the directory into which the presentation file 
+ *                          should be saved
+ * @replace_file_if_exists : %TRUE if the file should be replaced if it already exists,
+ *                           %FALSE otherwise
+ * @download_folders: %TRUE if you want to download all the directory three, 
+ *                    otherwise %FALSE
  * @cancellable: optional GCancellable object, or NULL
  * @error :    a GError, or NULL
  */
@@ -731,15 +746,16 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *file,
       {
         const GDataDocumentsSpreadsheet *tmp_entry = GDATA_DOCUMENTS_SPREADSHEET (entry);
         new_file = g_file_new_for_path (local_path);
-        new_file = gdata_documents_spreadsheet_download_document (tmp_entry, 
-                                                                  service, 
-                                                                  content_type, 
-                                                                  GDATA_DOCUMENTS_SPREADSHEET_ODS,
-                                                                  -1, 
-                                                                  new_file, 
-                                                                  replace_file_if_exists, 
-                                                                  cancellable, 
-                                                                  error);
+        new_file = gdata_documents_spreadsheet_download_document (
+                                                        tmp_entry, 
+                                                        service, 
+                                                        content_type, 
+                                                        GDATA_DOCUMENTS_SPREADSHEET_ODS,
+                                                        -1, 
+                                                        new_file, 
+                                                        replace_file_if_exists, 
+                                                        cancellable, 
+                                                        error);
       }
     else if (GDATA_IS_DOCUMENTS_TEXT (entry))
       {
@@ -755,7 +771,8 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *file,
       }
     else if (GDATA_IS_DOCUMENTS_PRESENTATION (entry))
       {
-        const GDataDocumentsPresentation *tmp_entry = GDATA_DOCUMENTS_PRESENTATION (entry);
+        const GDataDocumentsPresentation *tmp_entry = GDATA_DOCUMENTS_PRESENTATION (
+                                                                                entry);
         new_file = g_file_new_for_path (local_path);
         new_file = gdata_documents_presentation_download_document (
                                                        tmp_entry,
@@ -856,35 +873,42 @@ g_vfs_gdocs_file_class_init (GVfsGDocsFileClass *klass)
      * The #GDataDocumentsEntry corresponding.
      **/
     g_object_class_install_property (gobject_class, PROP_BACKEND,
-                                     g_param_spec_object ("backend",
-                                                          "backend", "The backend related to this #GVfsGDocsFile",
-                                                          G_VFS_TYPE_BACKEND,
-                                                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+                                     g_param_spec_object (
+                                                    "backend",
+                                                    "backend", 
+                                                    "The backend related to this #GVfsGDocsFile",
+                                                    G_VFS_TYPE_BACKEND,
+                                                    G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
     /*
      * GVfsGDocsFile:document-entry
      *
      * The #GDataDocumentsEntry corresponding.
      **/
     g_object_class_install_property (gobject_class, PROP_DOCUMENT_ENTRY,
-                                     g_param_spec_object ("document-entry",
-                                                          "document-entry", "The #GDataDocumentsEntry corresponding",
-                                                          GDATA_TYPE_DOCUMENTS_ENTRY,
-                                                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+                                     g_param_spec_object (
+                                                "document-entry",
+                                                "document-entry", 
+                                                "The #GDataDocumentsEntry corresponding",
+                                                GDATA_TYPE_DOCUMENTS_ENTRY,
+                                                G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
     /**
      * GDataGDEmailAddress:label:
      *
      * A simple string corresponding to the gvfs path of the class.
      **/
     g_object_class_install_property (gobject_class, PROP_GVFS_PATH,
-                g_param_spec_string ("gvfs-path",
-                                     "Gvfs path", "A simple string corresponding to the gvfs path of the class.",
-                                     "/",
-                                     G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+                g_param_spec_string (
+                        "gvfs-path",
+                        "Gvfs path", "A simple string corresponding to the gvfs path of the class.",
+                        "/",
+                        G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
 }
 
 static void
 g_vfs_gdocs_file_init (GVfsGDocsFile *self)
 {
-    self->priv = G_TYPE_INSTANCE_GET_PRIVATE (self, G_VFS_TYPE_GDOCS_FILE, GVfsGDocsFilePrivate);
+    self->priv = G_TYPE_INSTANCE_GET_PRIVATE (self, 
+                                              G_VFS_TYPE_GDOCS_FILE, 
+                                              GVfsGDocsFilePrivate);
 }

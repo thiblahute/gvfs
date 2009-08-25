@@ -689,31 +689,38 @@ g_vfs_ftp_task_receive (GVfsFtpTask *        task,
         if (flags & G_VFS_FTP_PASS_100)
           break;
         g_vfs_ftp_task_set_error_from_response (task, response);
-        return 0;
+        break;
       case 2:
         if (flags & G_VFS_FTP_FAIL_200)
-          {
-            g_vfs_ftp_task_set_error_from_response (task, response);
-            return 0;
-          }
+          g_vfs_ftp_task_set_error_from_response (task, response);
         break;
       case 3:
         if (flags & G_VFS_FTP_PASS_300)
           break;
         g_vfs_ftp_task_set_error_from_response (task, response);
-        return 0;
+        break;
       case 4:
         g_vfs_ftp_task_set_error_from_response (task, response);
-        return 0;
+        break;
       case 5:
         if ((flags & G_VFS_FTP_PASS_500) ||
             (response == 550 && (flags & G_VFS_FTP_PASS_550)))
           break;
         g_vfs_ftp_task_set_error_from_response (task, response);
-        return 0;
+        break;
       default:
         g_assert_not_reached ();
         break;
+    }
+
+  if (g_vfs_ftp_task_is_in_error (task))
+    {
+      if (response != 0 && reply)
+        {
+          g_strfreev (*reply);
+          *reply = NULL;
+        }
+      response = 0;
     }
 
   return response;
@@ -817,13 +824,14 @@ g_vfs_ftp_task_setup_data_connection_pasv (GVfsFtpTask *task, GVfsFtpMethod meth
         	 &port1, &port2) == 6)
        break;
     }
-  g_strfreev (reply);
   if (*s == 0)
     {
+      g_strfreev (reply);
       g_set_error_literal (&task->error, G_IO_ERROR, G_IO_ERROR_FAILED,
         		   _("Invalid reply"));
       return G_VFS_FTP_METHOD_ANY;
     }
+  g_strfreev (reply);
 
   if (method == G_VFS_FTP_METHOD_PASV || method == G_VFS_FTP_METHOD_ANY)
     {

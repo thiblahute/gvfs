@@ -438,6 +438,7 @@ meta_tree_init (MetaTree *tree)
 
 	  dir = g_path_get_dirname (tree->filename);
 	  g_mkdir_with_parents (dir, 0700);
+	  g_free (dir);
 
 	  builder = meta_builder_new ();
 	  retried = TRUE;
@@ -2336,6 +2337,7 @@ static gboolean
 meta_tree_flush_locked (MetaTree *tree)
 {
   MetaBuilder *builder;
+  gboolean res;
 
   builder = meta_builder_new ();
 
@@ -2344,12 +2346,14 @@ meta_tree_flush_locked (MetaTree *tree)
   if (tree->journal)
     apply_journal_to_builder (tree, builder);
 
-  meta_builder_write (builder,
-		      meta_tree_get_filename (tree));
+  res = meta_builder_write (builder,
+			    meta_tree_get_filename (tree));
+  if (res)
+    meta_tree_refresh_locked (tree);
 
-  meta_tree_refresh_locked (tree);
+  meta_builder_free (builder);
 
-  return FALSE;
+  return res;
 }
 
 gboolean

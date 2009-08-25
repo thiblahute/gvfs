@@ -57,9 +57,9 @@ struct _GVfsBackendGdocs
     GHashTable				*entries;
 };
 
-void g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs *backend,
-                                          GCancellable *cancellable,
-                                          GError **error);
+void g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs  *backend,
+                                          GCancellable      *cancellable,
+                                          GError            **error);
 
 G_END_DECLS
 

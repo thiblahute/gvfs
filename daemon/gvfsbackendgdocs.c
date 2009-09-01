@@ -52,6 +52,9 @@
 #include "gvfsdaemonprotocol.h"
 #include "gvfskeyring.h"
 
+/*Gdata client ID, we should ask for a new one for GVFS*/
+#define CLIENT_ID "ytapi-GNOME-libgdata-444fubtt-0"
+
 G_DEFINE_TYPE (GVfsBackendGdocs, g_vfs_backend_gdocs, G_VFS_TYPE_BACKEND)
 
 static void
@@ -82,7 +85,10 @@ static void
 g_vfs_backend_gdocs_init (GVfsBackendGdocs *backend)
 {
     backend->service = gdata_documents_service_new (CLIENT_ID);
-    backend->entries = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_object_unref);
+    backend->entries = g_hash_table_new_full (g_str_hash,
+                                              g_str_equal,
+                                              NULL,
+                                              g_object_unref);
 }
 
 /* ************************************************************************* */
@@ -124,8 +130,8 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
         const gchar *entry_id = gdata_documents_entry_get_document_id (document_entry);
         g_hash_table_insert (backend->entries,
                              entry_id,
-                             g_vfs_gdocs_file_new_from_document_entry (backend, 
-                                                                       document_entry, 
+                             g_vfs_gdocs_file_new_from_document_entry (backend,
+                                                                       document_entry,
                                                                        NULL));
       }
 
@@ -138,7 +144,7 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
                          root_file);
 }
 
-/* ************************************************************************* */
+/* ********************************************************************************** */
 /* virtual functions overrides */
 static void
 do_mount (GVfsBackend   *backend,
@@ -147,7 +153,8 @@ do_mount (GVfsBackend   *backend,
           GMountSource  *mount_source,
           gboolean      is_automount)
 {
-    gchar               *ask_user, *ask_password, *prompt, *display_name, *full_username;
+    gchar               *ask_user, *ask_password, *prompt,
+                        *display_name, *full_username;
     const gchar         *username, *host;
     gboolean            aborted, retval;
     GMountSpec          *gdocs_mount_spec;
@@ -183,7 +190,7 @@ do_mount (GVfsBackend   *backend,
 
     if (username != NULL)
       {
-        /* Check if the password as already been saved for the user, 
+        /* Check if the password as already been saved for the user,
          * we set the protocol as gdata can be shared by variours google services
          **/
         if (!g_vfs_keyring_lookup_password (username,
@@ -197,8 +204,8 @@ do_mount (GVfsBackend   *backend,
                                             NULL,
                                             &ask_password))
           {
-            prompt = g_strdup_printf (_("Enter %s@%s's google documents password"), 
-                                      username, 
+            prompt = g_strdup_printf (_("Enter %s@%s's google documents password"),
+                                      username,
                                       host);
             if (!g_mount_source_ask_password (mount_source,
                                               prompt,
@@ -507,7 +514,7 @@ do_move (GVfsBackend            *backend,
             return;
           }
 
-        entry = GDATA_DOCUMENTS_ENTRY (g_vfs_gdocs_file_get_document_entry (source_file));
+        entry = g_vfs_gdocs_file_get_document_entry (source_file);
         folder_entry = g_vfs_gdocs_file_get_document_entry (containing_folder);
         g_message ("Moving %s out of %s",
                    gdata_documents_entry_get_document_id (entry),
@@ -893,7 +900,7 @@ do_delete (GVfsBackend      *backend,
 
     gdata_service_delete_entry (service,
                                 GDATA_ENTRY (g_vfs_gdocs_file_get_document_entry (file)),
-                                cancellable,
+                              /\s\+$  cancellable,
                                 &error);
     if (error != NULL)
       {

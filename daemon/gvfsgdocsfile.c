@@ -115,9 +115,9 @@ g_vfs_gdocs_file_new_folder_from_gvfs (GVfsBackendGdocs *backend,
 {
     GVfsGDocsFile *folder;
 
-    folder = g_vfs_gdocs_file_new_from_gvfs (backend, 
-                                             gvfs_path, 
-                                             cancellable, 
+    folder = g_vfs_gdocs_file_new_from_gvfs (backend,
+                                             gvfs_path,
+                                             cancellable,
                                              error);
     if (*error != NULL)
       {
@@ -128,9 +128,9 @@ g_vfs_gdocs_file_new_folder_from_gvfs (GVfsBackendGdocs *backend,
 
     if (!g_vfs_gdocs_file_is_folder (folder))
      {
-        g_set_error (error, 
-                     G_IO_ERROR, 
-                     G_IO_ERROR_NOT_DIRECTORY, 
+        g_set_error (error,
+                     G_IO_ERROR,
+                     G_IO_ERROR_NOT_DIRECTORY,
                      _("%s is not a directory"), gvfs_path);
         g_object_unref (folder);
         return NULL;
@@ -200,9 +200,9 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
 
     if (file == NULL)
       {
-        g_set_error (error, G_IO_ERROR, 
-                     G_IO_ERROR_NOT_FOUND, 
-                     _("%s not found"), 
+        g_set_error (error, G_IO_ERROR,
+                     G_IO_ERROR_NOT_FOUND,
+                     _("%s not found"),
                      gvfs_path);
         return NULL;
       }
@@ -233,10 +233,10 @@ g_vfs_gdocs_file_new_from_document_entry (GVfsBackendGdocs      *backend,
 
     /*Root file*/
     if (document_entry == NULL)
-        return g_object_new (G_VFS_TYPE_GDOCS_FILE, 
-                             "backend", backend, 
-                             "document-entry", document_entry, 
-                             "gvfs-path", "/", 
+        return g_object_new (G_VFS_TYPE_GDOCS_FILE,
+                             "backend", backend,
+                             "document-entry", document_entry,
+                             "gvfs-path", "/",
                              NULL);
 
     g_return_val_if_fail (GDATA_IS_DOCUMENTS_ENTRY (document_entry), NULL);
@@ -249,10 +249,10 @@ g_vfs_gdocs_file_new_from_document_entry (GVfsBackendGdocs      *backend,
         return NULL;
       }
 
-    return g_object_new (G_VFS_TYPE_GDOCS_FILE, 
-                         "backend", backend, 
-                         "document-entry", document_entry, 
-                         "gvfs-path", gvfs_path, 
+    return g_object_new (G_VFS_TYPE_GDOCS_FILE,
+                         "backend", backend,
+                         "document-entry", document_entry,
+                         "gvfs-path", gvfs_path,
                          NULL);
 }
 
@@ -275,7 +275,7 @@ g_vfs_gdocs_file_new_parent (GVfsBackendGdocs       *backend,
                              GError                 **error)
 {
     return g_vfs_gdocs_file_new_parent_from_gvfs (backend,
-                                                  file->priv->gvfs_path, 
+                                                  file->priv->gvfs_path,
                                                   cancellable,
                                                   error);
 }
@@ -322,9 +322,9 @@ g_vfs_gdocs_file_new_parent_from_gvfs (GVfsBackendGdocs     *backend,
     parent_entry_pseudo_path = g_strconcat ("/", parent_entry_id, NULL);
     g_free (parent_entry_id);
 
-    parent_folder =  g_vfs_gdocs_file_new_folder_from_gvfs (backend, 
-                                                            parent_entry_pseudo_path, 
-                                                            cancellable, 
+    parent_folder =  g_vfs_gdocs_file_new_folder_from_gvfs (backend,
+                                                            parent_entry_pseudo_path,
+                                                            cancellable,
                                                             error);
     g_free (parent_entry_pseudo_path);
 
@@ -404,10 +404,10 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *file,
       }
     else if (!g_vfs_gdocs_file_is_root (file))
       {
-        g_set_error (error, 
-                     G_IO_ERROR, 
-                     G_IO_ERROR_NOT_SUPPORTED, 
-                     _("%s not supported"), 
+        g_set_error (error,
+                     G_IO_ERROR,
+                     G_IO_ERROR_NOT_SUPPORTED,
+                     _("%s not supported"),
                      file->priv->gvfs_path);
         return NULL;
       }
@@ -456,9 +456,9 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *file,
     if (*display_name->str == '.')
         g_file_info_set_is_hidden (info, TRUE);
 
-    if (g_strstr_len (display_name->str, 
+    if (g_strstr_len (display_name->str,
                       strlen (display_name),
-                      "\357\277\275") 
+                      "\357\277\275")
              != NULL)
         g_string_append (display_name, " (invalid encoding)");
     else
@@ -482,9 +482,9 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *file,
       }
     g_file_info_set_display_name (info, display_name->str);
 
-    if (g_file_attribute_matcher_matches (matcher, 
-                                          G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE) 
-            || g_file_attribute_matcher_matches (matcher, 
+    if (g_file_attribute_matcher_matches (matcher,
+                                          G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE)
+            || g_file_attribute_matcher_matches (matcher,
                                           G_FILE_ATTRIBUTE_STANDARD_ICON))
       {
         icon = NULL;
@@ -502,12 +502,12 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *file,
       }
     g_free (content_type);
 
-    if (g_file_attribute_matcher_matches (matcher, 
+    if (g_file_attribute_matcher_matches (matcher,
                                           G_FILE_ATTRIBUTE_ETAG_VALUE))
       {
         const gchar *etag = gdata_entry_get_etag (file->priv->document_entry);
-        g_file_info_set_attribute_string (info, 
-                                          G_FILE_ATTRIBUTE_ETAG_VALUE, 
+        g_file_info_set_attribute_string (info,
+                                          G_FILE_ATTRIBUTE_ETAG_VALUE,
                                           etag);
       }
     g_string_free (display_name, TRUE);
@@ -587,12 +587,12 @@ g_vfs_gdocs_file_get_download_uri (GVfsGDocsFile    *file,
         GDataDocumentsSpreadsheet *spreadsheet = GDATA_DOCUMENTS_SPREADSHEET (entry);
         return gdata_documents_spreadsheet_get_download_uri (
                                                 spreadsheet,
-                                                GDATA_DOCUMENTS_SPREADSHEET_ODS, 
+                                                GDATA_DOCUMENTS_SPREADSHEET_ODS,
                                                 -1);
       }
     else if (GDATA_IS_DOCUMENTS_TEXT (entry))
       {
-        return gdata_documents_text_get_download_uri (GDATA_DOCUMENTS_TEXT (entry), 
+        return gdata_documents_text_get_download_uri (GDATA_DOCUMENTS_TEXT (entry),
                                                       GDATA_DOCUMENTS_TEXT_ODT);
       }
     else if (GDATA_IS_DOCUMENTS_PRESENTATION (entry))
@@ -603,10 +603,10 @@ g_vfs_gdocs_file_get_download_uri (GVfsGDocsFile    *file,
       }
     else
       {
-        g_set_error (error, 
-                     G_IO_ERROR, 
+        g_set_error (error,
+                     G_IO_ERROR,
                      G_IO_ERROR_NOT_SUPPORTED,
-                     _("%s is not a supported document type"), 
+                     _("%s is not a supported document type"),
                      g_vfs_gdocs_file_get_gvfs_path (file));
         g_object_unref (file);
         return NULL;
@@ -619,11 +619,11 @@ g_vfs_gdocs_file_get_download_uri (GVfsGDocsFile    *file,
  * @content_type: return location for the document's content type, or NULL;
  *                free with g_free()
  * @export_format: the format in which the presentation should be exported
- * @destination_directory :the directory into which the presentation file 
+ * @destination_directory :the directory into which the presentation file
  *                          should be saved
  * @replace_file_if_exists : %TRUE if the file should be replaced if it already exists,
  *                           %FALSE otherwise
- * @download_folders: %TRUE if you want to download all the directory three, 
+ * @download_folders: %TRUE if you want to download all the directory three,
  *                    otherwise %FALSE
  * @cancellable: optional GCancellable object, or NULL
  * @error :    a GError, or NULL
@@ -651,10 +651,10 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *file,
         {
         if (download_folders == FALSE)
           {
-            g_set_error (error, 
-                         G_IO_ERROR, 
+            g_set_error (error,
+                         G_IO_ERROR,
                          G_IO_ERROR_IS_DIRECTORY,
-                         _("%s is a directory"), 
+                         _("%s is a directory"),
                          g_vfs_gdocs_file_get_gvfs_path (file));
             return NULL;
           }
@@ -680,11 +680,11 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *file,
                 query  = gdata_documents_query_new (NULL);
                 gdata_documents_query_set_folder_id (query, folder_id);
               }
-            tmp_feed = gdata_documents_service_query_documents (service, 
-                                                                query, 
-                                                                cancellable, 
-                                                                NULL, 
-                                                                NULL, 
+            tmp_feed = gdata_documents_service_query_documents (service,
+                                                                query,
+                                                                cancellable,
+                                                                NULL,
+                                                                NULL,
                                                                 error);
             if (query != NULL)
                 g_object_unref (query);
@@ -701,10 +701,10 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *file,
                                                                         element->data);
                 const gchar *tmp_id = gdata_documents_entry_get_document_id (tmp_entry);
 
-                gchar *new_destination_directory = g_strconcat (local_path, 
-                                                                tmp_id, 
+                gchar *new_destination_directory = g_strconcat (local_path,
+                                                                tmp_id,
                                                                 NULL);
-                /* If it's the root directory, 
+                /* If it's the root directory,
                  * we check that the document is not contained in another folder
                  **/
                 if (is_root)
@@ -715,23 +715,23 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *file,
                     if (parent != NULL)
                         g_object_unref (parent);
                     else
-                        g_vfs_gdocs_file_download_file (file, 
-                                                        content_type, 
-                                                        new_destination_directory, 
-                                                        replace_file_if_exists, 
-                                                        TRUE, 
-                                                        cancellable, 
+                        g_vfs_gdocs_file_download_file (file,
+                                                        content_type,
+                                                        new_destination_directory,
+                                                        replace_file_if_exists,
+                                                        TRUE,
+                                                        cancellable,
                                                         error);
                     g_object_unref (test_file);
                     g_free (path);
                   }
                 else
-                    g_vfs_gdocs_file_download_file (file, 
-                                                    content_type, 
-                                                    new_destination_directory, 
-                                                    replace_file_if_exists, 
-                                                    TRUE, 
-                                                    cancellable, 
+                    g_vfs_gdocs_file_download_file (file,
+                                                    content_type,
+                                                    new_destination_directory,
+                                                    replace_file_if_exists,
+                                                    TRUE,
+                                                    cancellable,
                                                     error);
                 if (*error != NULL)
                   {
@@ -747,14 +747,14 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *file,
         const GDataDocumentsSpreadsheet *tmp_entry = GDATA_DOCUMENTS_SPREADSHEET (entry);
         new_file = g_file_new_for_path (local_path);
         new_file = gdata_documents_spreadsheet_download_document (
-                                                        tmp_entry, 
-                                                        service, 
-                                                        content_type, 
+                                                        tmp_entry,
+                                                        service,
+                                                        content_type,
                                                         GDATA_DOCUMENTS_SPREADSHEET_ODS,
-                                                        -1, 
-                                                        new_file, 
-                                                        replace_file_if_exists, 
-                                                        cancellable, 
+                                                        -1,
+                                                        new_file,
+                                                        replace_file_if_exists,
+                                                        cancellable,
                                                         error);
       }
     else if (GDATA_IS_DOCUMENTS_TEXT (entry))
@@ -762,11 +762,11 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *file,
         new_file = g_file_new_for_path (local_path);
         new_file = gdata_documents_text_download_document (GDATA_DOCUMENTS_TEXT (entry),
                                                            service,
-                                                           content_type, 
+                                                           content_type,
                                                            GDATA_DOCUMENTS_TEXT_ODT,
                                                            new_file,
-                                                           replace_file_if_exists, 
-                                                           cancellable, 
+                                                           replace_file_if_exists,
+                                                           cancellable,
                                                            error);
       }
     else if (GDATA_IS_DOCUMENTS_PRESENTATION (entry))
@@ -776,7 +776,7 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *file,
         new_file = g_file_new_for_path (local_path);
         new_file = gdata_documents_presentation_download_document (
                                                        tmp_entry,
-                                                       service, 
+                                                       service,
                                                        content_type,
                                                        GDATA_DOCUMENTS_PRESENTATION_PPT,
                                                        new_file,
@@ -786,8 +786,8 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *file,
       }
     else
       {
-        g_set_error (error, 
-                     G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, 
+        g_set_error (error,
+                     G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
                      _("%s is not a supported document type"),
                      g_vfs_gdocs_file_get_gvfs_path (file));
         g_object_unref (file);
@@ -820,7 +820,7 @@ g_vfs_gdocs_file_get_property (GObject      *object,
 static void
 g_vfs_gdocs_file_set_property (GObject      *object,
                                guint        property_id,
-                               const GValue *value, 
+                               const GValue *value,
                                GParamSpec   *pspec)
 {
     GVfsGDocsFilePrivate *priv = G_VFS_GDOCS_FILE_GET_PRIVATE (object);
@@ -875,7 +875,7 @@ g_vfs_gdocs_file_class_init (GVfsGDocsFileClass *klass)
     g_object_class_install_property (gobject_class, PROP_BACKEND,
                                      g_param_spec_object (
                                                     "backend",
-                                                    "backend", 
+                                                    "backend",
                                                     "The backend related to this #GVfsGDocsFile",
                                                     G_VFS_TYPE_BACKEND,
                                                     G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
@@ -887,7 +887,7 @@ g_vfs_gdocs_file_class_init (GVfsGDocsFileClass *klass)
     g_object_class_install_property (gobject_class, PROP_DOCUMENT_ENTRY,
                                      g_param_spec_object (
                                                 "document-entry",
-                                                "document-entry", 
+                                                "document-entry",
                                                 "The #GDataDocumentsEntry corresponding",
                                                 GDATA_TYPE_DOCUMENTS_ENTRY,
                                                 G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
@@ -908,7 +908,7 @@ g_vfs_gdocs_file_class_init (GVfsGDocsFileClass *klass)
 static void
 g_vfs_gdocs_file_init (GVfsGDocsFile *self)
 {
-    self->priv = G_TYPE_INSTANCE_GET_PRIVATE (self, 
-                                              G_VFS_TYPE_GDOCS_FILE, 
+    self->priv = G_TYPE_INSTANCE_GET_PRIVATE (self,
+                                              G_VFS_TYPE_GDOCS_FILE,
                                               GVfsGDocsFilePrivate);
 }

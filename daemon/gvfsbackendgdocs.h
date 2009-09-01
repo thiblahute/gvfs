@@ -37,9 +37,6 @@ G_BEGIN_DECLS
 #define G_VFS_IS_BACKEND_GDOCS_CLASS(k)  (G_TYPE_CHECK_CLASS_TYPE ((k), G_VFS_TYPE_BACKEND_GDOCS))
 #define G_VFS_BACKEND_GDOCS_GET_CLASS(o) (G_TYPE_INSTANCE_GET_CLASS ((o), G_VFS_TYPE_BACKEND_GDOCS, GVfsBackendGdocsClass))
 
-/*Gdata client ID, we should ask for a new one for GVFS*/
-#define CLIENT_ID "ytapi-GNOME-libgdata-444fubtt-0"
-
 typedef struct _GVfsBackendGdocs        GVfsBackendGdocs;
 typedef struct _GVfsBackendGdocsClass   GVfsBackendGdocsClass;
 

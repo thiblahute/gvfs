@@ -65,18 +65,12 @@ g_vfs_backend_gdocs_finalize (GObject *object)
 
     backend = G_VFS_BACKEND_GDOCS (object);
     g_hash_table_destroy (backend->entries);
-}
-
-static void
-g_vfs_backend_gdocs_dispose (GObject *object)
-{
-    GVfsBackendGdocs *backend;
-
-    backend = G_VFS_BACKEND_GDOCS (object);
     if (backend->service != NULL )
       {
         g_object_unref (backend->service);
       }
+
+  G_OBJECT_CLASS (g_vfs_backend_gdocs_parent_class)->finalize (object);
 }
 
 #define DEBUG_MAX_BODY_SIZE (100 * 1024 * 1024)
@@ -1240,7 +1234,6 @@ g_vfs_backend_gdocs_class_init (GVfsBackendGdocsClass *klass)
     GVfsBackendClass *backend_class;
 
     gobject_class->finalize  = g_vfs_backend_gdocs_finalize;
-    gobject_class->dispose  = g_vfs_backend_gdocs_dispose;
 
     backend_class = G_VFS_BACKEND_CLASS (klass);
 

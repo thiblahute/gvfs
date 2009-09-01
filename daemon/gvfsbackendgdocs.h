@@ -27,7 +27,6 @@
 #include <gmountspec.h>
 #include <gdata/gdata.h>
 
-
 G_BEGIN_DECLS
 
 #define G_VFS_TYPE_BACKEND_GDOCS         (g_vfs_backend_gdocs_get_type ())

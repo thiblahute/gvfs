@@ -41,9 +41,7 @@ static void g_vfs_gdocs_file_set_property (GObject      *object,
                                            guint        property_id,
                                            const GValue *value,
                                            GParamSpec   *pspec);
-static void g_vfs_gdocs_file_dispose (GObject           *object);
 static void g_vfs_gdocs_file_finalize (GObject          *object);
-
 
 /*Private structure*/
 struct _GVfsGDocsFilePrivate {
@@ -206,7 +204,6 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
                      gvfs_path);
         return NULL;
       }
-
 
     return file;
 }
@@ -838,20 +835,17 @@ g_vfs_gdocs_file_set_property (GObject      *object,
       }
 }
 static void
-g_vfs_gdocs_file_dispose (GObject *object)
-{
-    GVfsGDocsFilePrivate *priv = G_VFS_GDOCS_FILE_GET_PRIVATE (object);
-    if (priv->backend != NULL)
-        g_object_unref (priv->backend);
-    if (priv->document_entry != NULL)
-        g_object_unref (priv->document_entry);
-}
 
 static void
 g_vfs_gdocs_file_finalize (GObject *object)
 {
     GVfsGDocsFilePrivate *priv = G_VFS_GDOCS_FILE_GET_PRIVATE (object);
 
+    GVfsGDocsFilePrivate *priv = G_VFS_GDOCS_FILE_GET_PRIVATE (object);
+    if (priv->backend != NULL)
+        g_object_unref (priv->backend);
+    if (priv->document_entry != NULL)
+        g_object_unref (priv->document_entry);
     g_free (priv->gvfs_path);
 }
 
@@ -864,7 +858,6 @@ g_vfs_gdocs_file_class_init (GVfsGDocsFileClass *klass)
 
     gobject_class->get_property = g_vfs_gdocs_file_get_property;
     gobject_class->set_property = g_vfs_gdocs_file_set_property;
-    gobject_class->dispose = g_vfs_gdocs_file_dispose;
     gobject_class->finalize = g_vfs_gdocs_file_finalize;
 
     /**

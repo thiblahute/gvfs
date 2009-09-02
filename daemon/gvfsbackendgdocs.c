@@ -66,11 +66,9 @@ g_vfs_backend_gdocs_finalize (GObject *object)
     backend = G_VFS_BACKEND_GDOCS (object);
     g_hash_table_destroy (backend->entries);
     if (backend->service != NULL )
-      {
         g_object_unref (backend->service);
-      }
-
-  G_OBJECT_CLASS (g_vfs_backend_gdocs_parent_class)->finalize (object);
+    
+    G_OBJECT_CLASS (g_vfs_backend_gdocs_parent_class)->finalize (object);
 }
 
 #define DEBUG_MAX_BODY_SIZE (100 * 1024 * 1024)
@@ -157,11 +155,13 @@ do_mount (GVfsBackend   *backend,
     GPasswordSave       password_save_flags = G_PASSWORD_SAVE_NEVER;
     GVfsBackendGdocs    *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GError              *error = NULL;
+    gboolean            show_dialog = TRUE;
 
     /*Get usename*/
     username = g_mount_spec_get (mount_spec, "user");
     host = g_mount_spec_get (mount_spec, "host");
-    g_message ("Mounting %s @ %s\n", username, host);
+    prompt = NULL;
+    g_debug ("Mounting %s @ %s\n", username, host);
 
     if (host == NULL)
         host = "gmail.com";
@@ -186,7 +186,7 @@ do_mount (GVfsBackend   *backend,
       {
         /* Check if the password as already been saved for the user,
          * we set the protocol as gdata can be shared by variours google services
-         **/
+         */
         if (!g_vfs_keyring_lookup_password (username,
                                             host,
                                             NULL,
@@ -201,72 +201,13 @@ do_mount (GVfsBackend   *backend,
             prompt = g_strdup_printf (_("Enter %s@%s's google documents password"),
                                       username,
                                       host);
-            if (!g_mount_source_ask_password (mount_source,
-                                              prompt,
-                                              username,
-                                              NULL,
-                                              flags,
-                                              &aborted,
-                                              &ask_password,
-                                              &ask_user,
-                                              NULL,
-                                              FALSE,
-                                              &password_save_flags)
-                    || aborted)
-              {
-                if (aborted)
-                    g_vfs_job_failed (G_VFS_JOB (job),
-                                      G_IO_ERROR,
-                                      G_IO_ERROR_PERMISSION_DENIED,
-                                      _("Password dialog cancelled"));
-                else
-                    g_vfs_job_failed (G_VFS_JOB (job),
-                                      G_IO_ERROR,
-                                      G_IO_ERROR_FAILED,
-                                      _("Password access issue"));
-                g_free (ask_user);
-                g_free (ask_password);
-                g_free (prompt);
-
-                return;
-              }
-
-            g_free (prompt);
           }
+        else
+          show_dialog = TRUE;
       }
     else
-      {
         prompt =  g_strdup ("Enter username and password to access google documents.");
-        if (!g_mount_source_ask_password (mount_source,
-                                          prompt,
-                                          username,
-                                          NULL,
-                                          flags,
-                                          &aborted,
-                                          &ask_password,
-                                          &ask_user,
-                                          NULL,
-                                          FALSE,
-                                          &password_save_flags)
-                || aborted)
-          {
-            if (aborted)
-                g_vfs_job_failed (G_VFS_JOB (job),
-                                  G_IO_ERROR,
-                                  G_IO_ERROR_FAILED,
-                                  _("Password dialog cancelled"));
-            else
-                g_vfs_job_failed (G_VFS_JOB (job),
-                                  G_IO_ERROR, G_IO_ERROR_FAILED,
-                                  _("Password access issue"));
 
-            g_free (ask_user);
-            g_free (prompt);
-            g_free (ask_password);
-            return;
-          }
-        g_free (prompt);
-      }
 
     /* We build the complete adress with which we are going to connect*/
     if (ask_user == NULL)
@@ -277,28 +218,60 @@ do_mount (GVfsBackend   *backend,
     else
         full_username = g_strdup_printf ("%s@%s", ask_user, host);
 
-    /*Try to connect to the server*/
+    /*Connect to the server*/
     while (TRUE)
       {
-        g_message ("-> Username: %s\n", full_username);
-        g_message ("password: ***\n");
+        g_debug ("-> Username: %s\n", full_username);
+        g_debug ("password: ***\n");
+        if (show_dialog == TRUE && (!g_mount_source_ask_password (mount_source,
+                                                                 prompt,
+                                                                 username,
+                                                                 NULL,
+                                                                 flags,
+                                                                 &aborted,
+                                                                 &ask_password,
+                                                                 &ask_user,
+                                                                 NULL,
+                                                                 FALSE,
+                                                                 &password_save_flags)
+                                   || aborted))
+          {
+            if (aborted)
+              g_vfs_job_failed (G_VFS_JOB (job),
+                          G_IO_ERROR,
+                          G_IO_ERROR_PERMISSION_DENIED,
+                          _("Password dialog cancelled"));
+            else
+              g_vfs_job_failed (G_VFS_JOB (job),
+                          G_IO_ERROR,
+                          G_IO_ERROR_FAILED,
+                          _("Password access issue"));
+            g_free (ask_user);
+            g_free (ask_password);
+            g_free (prompt);
+
+            return;
+          }
         retval = gdata_service_authenticate (GDATA_SERVICE (gdocs_backend->service),
-                                             full_username,
-                                             ask_password,
-                                             NULL,
-                                             &error);
+                    full_username,
+                    ask_password,
+                    NULL,
+                    &error);
         if (retval == TRUE)
           {
-            /*save the password*/
+            /* Save the password, we use gdata as protocol  name
+             * since we could use the same protocol later for other
+             * google services (as picasaweb)
+             **/
             g_vfs_keyring_save_password (username,
-                                         host,
-                                         NULL,
-                                         "gdata",
-                                         NULL,
-                                         NULL,
-                                         0,
-                                         ask_password,
-                                         password_save_flags);
+                        host,
+                        NULL,
+                        "gdata",
+                        NULL,
+                        NULL,
+                        0,
+                        ask_password,
+                        password_save_flags);
 
             /*Mount it*/
             gdocs_mount_spec= g_mount_spec_new ("gdocs");
@@ -314,51 +287,23 @@ do_mount (GVfsBackend   *backend,
             g_vfs_backend_set_icon_name (backend, "folder-remote");
             break;
           }
-        else
-          {
-            flags = G_ASK_PASSWORD_NEED_PASSWORD;
-            prompt = g_strdup_printf (_("Enter %s's google documents password"),
-                                      full_username);
-            if (g_vfs_keyring_is_available ())
-                flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
 
-            if (!g_mount_source_ask_password (mount_source,
-                                              prompt,
-                                              username,
-                                              NULL,
-                                              flags,
-                                              &aborted,
-                                              &ask_password,
-                                              NULL,
-                                              NULL,
-                                              FALSE,
-                                              &password_save_flags)
-                    || aborted)
-              {
-                if (aborted)
-                    g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR,
-                                      G_IO_ERROR_PERMISSION_DENIED,
-                                      _("Password dialog cancelled"));
-                else
-                    g_vfs_job_failed (G_VFS_JOB (job),
-                                      G_IO_ERROR,
-                                      G_IO_ERROR_FAILED,
-                                      _("Password access issue"));
-                g_free (ask_password);
-                g_free (full_username);
-                g_free (prompt);
-                return;
-              }
+        flags = G_ASK_PASSWORD_NEED_PASSWORD;
+        if (g_vfs_keyring_is_available ())
+            flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
 
-            g_free (prompt);
-          }
+        prompt = g_strdup_printf (_("Your password was wrong, please enter %s's\
+                                  google documents password again"),
+                                  full_username);
+        show_dialog = TRUE;
+        g_clear_error (&error);
       }
 
     g_free (full_username);
     g_free (ask_password);
 
     g_vfs_job_succeeded (G_VFS_JOB (job));
-    g_message ("===Connected\n");
+    g_debug ("===Connected\n");
 }
 
 void
@@ -418,7 +363,7 @@ do_move (GVfsBackend            *backend,
             && g_strcmp0 (source_parent_id, "/") != 0)
         move_to_root = TRUE;
 
-    g_message ("Source id: %s, destination ID: %s", source_id, destination_id);
+    g_debug ("Source id: %s, destination ID: %s", source_id, destination_id);
     /* We check if we need to rename, if we need, the detination folder should be
      * the parent one*/
     if (g_strcmp0 (source_id, destination_id) != 0)
@@ -471,7 +416,7 @@ do_move (GVfsBackend            *backend,
                                                 source_file));
         folder_entry = GDATA_DOCUMENTS_FOLDER (g_vfs_gdocs_file_get_document_entry (
                                                         destination_folder));
-        g_message ("destination_folder: %s",
+        g_debug ("destination_folder: %s",
                    gdata_documents_entry_get_document_id (entry));
         new_entry = gdata_documents_service_move_document_to_folder (service,
                                                                      entry,
@@ -493,7 +438,7 @@ do_move (GVfsBackend            *backend,
 
     if (move_to_root)
       {
-        g_message ("Is moving to root");
+        g_debug ("Is moving to root");
         /* we need to check for the error that could have
          * happend building the destination_folder*/
         containing_folder = g_vfs_gdocs_file_new_parent_from_gvfs (
@@ -510,7 +455,7 @@ do_move (GVfsBackend            *backend,
 
         entry = g_vfs_gdocs_file_get_document_entry (source_file);
         folder_entry = g_vfs_gdocs_file_get_document_entry (containing_folder);
-        g_message ("Moving %s out of %s",
+        g_debug ("Moving %s out of %s",
                    gdata_documents_entry_get_document_id (entry),
                    gdata_documents_entry_get_document_id (folder_entry));
 
@@ -531,7 +476,7 @@ do_move (GVfsBackend            *backend,
       {
         gchar *new_filename = g_path_get_basename (destination);
 
-        g_message ("Renaming file: %s", new_filename);
+        g_debug ("Renaming file: %s", new_filename);
         if (new_entry == NULL)
             new_entry = g_vfs_gdocs_file_get_document_entry (source_file);
 
@@ -638,7 +583,7 @@ do_enumerate (GVfsBackend           *backend,
         /*Sets the query folder id*/
         gdata_documents_query_set_folder_id (query, folder_id);
         in_folder = TRUE;
-        g_message ("Folder ID: %s\n", folder_id);
+        g_debug ("Folder ID: %s\n", folder_id);
       }
 
     gdata_documents_query_set_show_folders (query, TRUE);
@@ -671,7 +616,7 @@ do_enumerate (GVfsBackend           *backend,
         path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (entries->data));
         parent_id = g_path_get_parent_basename (path);
 
-        //g_message ("Path: %s folder ID %s, parent_id: %s", folder_id, parent_id);
+        //g_debug ("Path: %s folder ID %s, parent_id: %s", folder_id, parent_id);
         /*We check that the file is in the selected folder (not in a child of it)*/
         if (g_strcmp0 (folder_id, parent_id) == 0 || in_folder)
           {
@@ -798,7 +743,7 @@ do_open_for_read (GVfsBackend           *backend,
     GCancellable        *cancellable = G_VFS_JOB (job)->cancellable;
     GVfsBackendGdocs    *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 
-    g_message ("OPEN READ: %s\n", filename);
+    g_debug ("OPEN READ: %s\n", filename);
 
     file = g_vfs_gdocs_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend),
                                            filename,
@@ -841,7 +786,7 @@ do_read (GVfsBackend        *backend,
     GOutputStream       *stream = G_INPUT_STREAM (handle);
     GVfsBackendGdocs    *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 
-    g_message ("DO READ\n");
+    g_debug ("DO READ\n");
 
     n_bytes = g_input_stream_read (stream,
                                    buffer,
@@ -894,7 +839,7 @@ do_delete (GVfsBackend      *backend,
 
     gdata_service_delete_entry (service,
                                 GDATA_ENTRY (g_vfs_gdocs_file_get_document_entry (file)),
-                              /\s\+$  cancellable,
+                                cancellable,
                                 &error);
     if (error != NULL)
       {
@@ -903,7 +848,7 @@ do_delete (GVfsBackend      *backend,
         return;
       }
 
-    g_message ("%s :deleted\n",
+    g_debug ("%s :deleted\n",
                gdata_entry_get_title (g_vfs_gdocs_file_get_document_entry (file)));
 
     g_vfs_job_succeeded (G_VFS_JOB (job));
@@ -1044,11 +989,11 @@ do_push (GVfsBackend            *backend,
     gdata_entry_set_title (GDATA_ENTRY (entry), destination_filename);
     g_free (destination_filename);
 
-    g_message ("Destination name:local path %s", local_path);
+    g_debug ("Destination name:local path %s", local_path);
     local_file = g_file_new_for_path (local_path);
     new_entry = gdata_documents_service_upload_document (GDATA_DOCUMENTS_SERVICE (service), NULL, local_file,
                                                          folder_entry, cancellable, &error);
-    g_message ("Test if working");
+    g_debug ("Test if working");
     g_object_unref (entry);
     g_object_unref (local_file);
     if (new_entry != NULL)
@@ -1109,7 +1054,7 @@ do_pull (GVfsBackend            *backend,
 
     if (error != NULL)
       {
-        g_message ("error downloading");
+        g_debug ("error downloading");
         g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
         g_error_free (error);
         return;

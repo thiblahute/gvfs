@@ -834,14 +834,12 @@ g_vfs_gdocs_file_set_property (GObject      *object,
             break;
       }
 }
-static void
 
 static void
 g_vfs_gdocs_file_finalize (GObject *object)
 {
     GVfsGDocsFilePrivate *priv = G_VFS_GDOCS_FILE_GET_PRIVATE (object);
 
-    GVfsGDocsFilePrivate *priv = G_VFS_GDOCS_FILE_GET_PRIVATE (object);
     if (priv->backend != NULL)
         g_object_unref (priv->backend);
     if (priv->document_entry != NULL)

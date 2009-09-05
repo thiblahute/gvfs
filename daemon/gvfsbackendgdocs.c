@@ -67,7 +67,7 @@ g_vfs_backend_gdocs_finalize (GObject *object)
     g_hash_table_destroy (backend->entries);
     if (backend->service != NULL )
         g_object_unref (backend->service);
-    
+
     G_OBJECT_CLASS (g_vfs_backend_gdocs_parent_class)->finalize (object);
 }
 
@@ -145,32 +145,32 @@ do_mount (GVfsBackend   *backend,
           GMountSource  *mount_source,
           gboolean      is_automount)
 {
-    gchar               *ask_user, *ask_password, *prompt,
-                        *display_name, *full_username;
+    gchar               *ask_user, *ask_password, *display_name;
     const gchar         *username, *host;
     gboolean            aborted, retval;
     GMountSpec          *gdocs_mount_spec;
     GAskPasswordFlags   flags;
 
-    GPasswordSave       password_save_flags = G_PASSWORD_SAVE_NEVER;
-    GVfsBackendGdocs    *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
+    gchar               *prompt = NULL;
+    gchar               *full_username = NULL;
     GError              *error = NULL;
     gboolean            show_dialog = TRUE;
+    GPasswordSave       password_save_flags = G_PASSWORD_SAVE_NEVER;
+    GVfsBackendGdocs    *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 
     /*Get usename*/
     username = g_mount_spec_get (mount_spec, "user");
     host = g_mount_spec_get (mount_spec, "host");
-    prompt = NULL;
-    g_debug ("Mounting %s @ %s\n", username, host);
 
+    /* We want an uri like gdocs://a_username to work
+     * We don't care about gdocs://host since it should never be used
+     * The host is actually the part after the '@' of the user's email address
+     * The default host is gmail.com since it's the most used by google documents
+     **/
     if (host == NULL)
         host = "gmail.com";
     else if (username == NULL)
       {
-        /* We want an uri like gdocs://a_username to work
-         * We don't care about gdocs://host since it should never be used
-         * The host is actually the part after the '@' of the user's email address
-         * */
         username = host;
         host = "gmail.com";
       }
@@ -178,9 +178,7 @@ do_mount (GVfsBackend   *backend,
     /* Set the password asking flags.*/
     flags =  G_ASK_PASSWORD_NEED_PASSWORD;
     if (g_vfs_keyring_is_available ())
-            flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
-    if (username == NULL)
-        flags |= G_ASK_PASSWORD_NEED_USERNAME;
+        flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
 
     if (username != NULL)
       {
@@ -197,43 +195,38 @@ do_mount (GVfsBackend   *backend,
                                             &ask_user,
                                             NULL,
                                             &ask_password))
-          {
             prompt = g_strdup_printf (_("Enter %s@%s's google documents password"),
                                       username,
                                       host);
-          }
         else
-          show_dialog = TRUE;
+            show_dialog = FALSE;
+
       }
     else
+      {
         prompt =  g_strdup ("Enter username and password to access google documents.");
+        flags |= G_ASK_PASSWORD_NEED_USERNAME;
+      }
+
 
 
     /* We build the complete adress with which we are going to connect*/
-    if (ask_user == NULL)
-      {
-        full_username = g_strdup_printf ("%s@%s", username, host);
-        ask_user = g_strdup (username);
-      }
-    else
-        full_username = g_strdup_printf ("%s@%s", ask_user, host);
 
     /*Connect to the server*/
     while (TRUE)
       {
-        g_debug ("-> Username: %s\n", full_username);
-        g_debug ("password: ***\n");
+        /* We first check that we need to show the ask password dialog */
         if (show_dialog == TRUE && (!g_mount_source_ask_password (mount_source,
-                                                                 prompt,
-                                                                 username,
-                                                                 NULL,
-                                                                 flags,
-                                                                 &aborted,
-                                                                 &ask_password,
-                                                                 &ask_user,
-                                                                 NULL,
-                                                                 FALSE,
-                                                                 &password_save_flags)
+                                                                  prompt,
+                                                                  username,
+                                                                  NULL,
+                                                                  flags,
+                                                                  &aborted,
+                                                                  &ask_password,
+                                                                  &ask_user,
+                                                                  NULL,
+                                                                  FALSE,
+                                                                  &password_save_flags)
                                    || aborted))
           {
             if (aborted)
@@ -252,26 +245,44 @@ do_mount (GVfsBackend   *backend,
 
             return;
           }
+
+        /* If it's the first loop, we create the full username 
+         * (which is the user email adresse
+         **/
+        if (full_username == NULL)
+          {
+            if (ask_user == NULL)
+              {
+                full_username = g_strdup_printf ("%s@%s", username, host);
+                ask_user = g_strdup (username);
+              }
+            else
+              full_username = g_strdup_printf ("%s@%s", ask_user, host);
+          }
+
+        g_debug ("-> Username: %s\n", full_username);
+        g_debug ("password: ***\n");
+        
         retval = gdata_service_authenticate (GDATA_SERVICE (gdocs_backend->service),
-                    full_username,
-                    ask_password,
-                    NULL,
-                    &error);
+                                             full_username,
+                                             ask_password,
+                                             NULL,
+                                             &error);
         if (retval == TRUE)
           {
-            /* Save the password, we use gdata as protocol  name
-             * since we could use the same protocol later for other
-             * google services (as picasaweb)
+            /* Save the password, we use "gdata" as protocol  name since we could 
+             * use the same protocol later for other google services (as picasaweb)
+             * which would have the same password
              **/
             g_vfs_keyring_save_password (username,
-                        host,
-                        NULL,
-                        "gdata",
-                        NULL,
-                        NULL,
-                        0,
-                        ask_password,
-                        password_save_flags);
+                                         host,
+                                         NULL,
+                                         "gdata",
+                                         NULL,
+                                         NULL,
+                                         0,
+                                         ask_password,
+                                         password_save_flags);
 
             /*Mount it*/
             gdocs_mount_spec= g_mount_spec_new ("gdocs");
@@ -299,8 +310,10 @@ do_mount (GVfsBackend   *backend,
         g_clear_error (&error);
       }
 
+    g_free (prompt);
     g_free (full_username);
     g_free (ask_password);
+    g_free (ask_user);
 
     g_vfs_job_succeeded (G_VFS_JOB (job));
     g_debug ("===Connected\n");
@@ -412,10 +425,9 @@ do_move (GVfsBackend            *backend,
           }
 
         /*Move the document on the server*/
-        entry = GDATA_DOCUMENTS_ENTRY (g_vfs_gdocs_file_get_document_entry (
-                                                source_file));
-        folder_entry = GDATA_DOCUMENTS_FOLDER (g_vfs_gdocs_file_get_document_entry (
-                                                        destination_folder));
+        entry = g_vfs_gdocs_file_get_document_entry (source_file);
+        folder_entry = GDATA_DOCUMENTS_FOLDER (
+                            g_vfs_gdocs_file_get_document_entry (destination_folder));
         g_debug ("destination_folder: %s",
                    gdata_documents_entry_get_document_id (entry));
         new_entry = gdata_documents_service_move_document_to_folder (service,
@@ -454,10 +466,12 @@ do_move (GVfsBackend            *backend,
           }
 
         entry = g_vfs_gdocs_file_get_document_entry (source_file);
-        folder_entry = g_vfs_gdocs_file_get_document_entry (containing_folder);
+        folder_entry = GDATA_DOCUMENTS_FOLDER (
+                            g_vfs_gdocs_file_get_document_entry (containing_folder));
         g_debug ("Moving %s out of %s",
                    gdata_documents_entry_get_document_id (entry),
-                   gdata_documents_entry_get_document_id (folder_entry));
+                   gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY(
+                                                                        folder_entry)));
 
         new_entry = gdata_documents_service_remove_document_from_folder (service,
                                                                          entry,
@@ -735,9 +749,8 @@ do_open_for_read (GVfsBackend           *backend,
                   const char            *filename)
 {
     gchar               *uri;
-    SoupMessage         *msg;
     GVfsGDocsFile       *file;
-    GOutputStream       *stream;
+    GInputStream        *stream;
 
     GError              *error = NULL;
     GCancellable        *cancellable = G_VFS_JOB (job)->cancellable;
@@ -765,6 +778,7 @@ do_open_for_read (GVfsBackend           *backend,
         return;
       }
 
+    /*Won't start downnloading untils g_input_stream_read_* is called*/
     stream = gdata_download_stream_new (GDATA_SERVICE (gdocs_backend->service), uri);
     g_free (uri);
 
@@ -774,25 +788,21 @@ do_open_for_read (GVfsBackend           *backend,
 }
 
 static void
-do_read (GVfsBackend        *backend,
-         GVfsJobRead        *job,
-         GVfsBackendHandle  handle,
-         char               *buffer,
-         gsize              bytes_requested)
+read_ready (GObject      *source_object,
+            GAsyncResult *result,
+            gpointer      user_data)
 {
-    gssize              n_bytes;
+    GInputStream *stream;
+    GVfsJob      *job;
+    GError       *error;
+    gssize        nread;
 
-    GError              *error = NULL;
-    GOutputStream       *stream = G_INPUT_STREAM (handle);
-    GVfsBackendGdocs    *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
+    stream = G_INPUT_STREAM (source_object); 
+    error  = NULL;
+    job    = G_VFS_JOB (user_data);
 
-    g_debug ("DO READ\n");
+    nread = g_input_stream_read_finish (stream, result, &error);
 
-    n_bytes = g_input_stream_read (stream,
-                                   buffer,
-                                   bytes_requested,
-                                   G_VFS_JOB (job)->cancellable,
-                                   &error);
     if (error != NULL)
       {
         g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -800,19 +810,163 @@ do_read (GVfsBackend        *backend,
         return;
       }
 
-    if (n_bytes >= 0)
-        g_vfs_job_read_set_size (job, n_bytes);
-
-    g_vfs_job_succeeded (G_VFS_JOB (job));
+    g_vfs_job_read_set_size (G_VFS_JOB_READ (job), nread);
+    g_vfs_job_succeeded (job);
 }
 
 static void
-do_close_read (GVfsBackend          *backend,
-               GVfsJobCloseRead     *job,
-               GVfsBackendHandle    handle)
+try_read (GVfsBackend       *backend,
+          GVfsJobRead       *job,
+          GVfsBackendHandle handle,
+          char              *buffer,
+          gsize             bytes_requested)
 {
-    g_object_unref (handle);
-    g_vfs_job_succeeded (G_VFS_JOB (job));
+    GOutputStream       *stream = G_INPUT_STREAM (handle);
+    GVfsBackendGdocs    *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
+    GCancellable        *cancellable = G_VFS_JOB (job)->cancellable;
+
+    g_input_stream_read_async (stream,
+                               buffer,
+                               bytes_requested,
+                               G_PRIORITY_DEFAULT,
+                               cancellable,
+                               read_ready,
+                               job);
+    return TRUE;
+}
+
+static void
+close_read_ready (GObject      *source_object,
+                  GAsyncResult *result,
+                  gpointer      user_data)
+{
+    gboolean        res;
+
+    GError          *error = NULL;
+    GVfsJob         *job = G_VFS_JOB (user_data);
+    GInputStream    *stream = G_INPUT_STREAM (source_object);
+
+    res = g_input_stream_close_finish (stream,
+                                       result,
+                                       &error);
+    if (res == FALSE)
+      {
+        g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+        g_error_free (error);
+      }
+    else
+      g_vfs_job_succeeded (job);
+
+    g_object_unref (stream);
+}
+
+static gboolean 
+try_close_read (GVfsBackend       *backend,
+                GVfsJobCloseRead  *job,
+                GVfsBackendHandle  handle)
+{
+    GInputStream    *stream;
+
+    stream = G_INPUT_STREAM (handle);
+
+    g_input_stream_close_async (stream,
+                                G_PRIORITY_DEFAULT,
+                                G_VFS_JOB (job)->cancellable,
+                                close_read_ready,
+                                job);
+    return TRUE;
+}
+
+static void
+write_ready (GObject      *source_object,
+            GAsyncResult *result,
+            gpointer      user_data)
+{
+    GOutputStream   *stream;
+    GVfsJob         *job;
+    GError          *error;
+    gssize          nread;
+
+    stream = G_OUTPUT_STREAM (source_object); 
+    error  = NULL;
+    job    = G_VFS_JOB (user_data);
+
+    nread = g_output_stream_write_finish (stream, result, &error);
+
+    if (error != NULL)
+      {
+        g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+        g_error_free (error);
+        return;
+      }
+
+    g_vfs_job_write_set_written_size (G_VFS_JOB_READ (job), nread);
+    g_vfs_job_succeeded (job);
+}
+
+static void
+try_write (GVfsBackend       *backend,
+          GVfsJobWrite      *job,
+          GVfsBackendHandle _handle,
+          char              *buffer,
+          gsize             buffer_size)
+{
+    gssize              n_bytes;
+
+    GError              *error = NULL;
+    GCancellable        *cancellable = G_VFS_JOB (job)->cancellable;
+    GDataUploadStream   *output_stream = G_OUTPUT_STREAM (_handle);
+
+    g_output_stream_write_async (output_stream,
+                                  buffer,
+                                  buffer_size,
+                                  G_PRIORITY_DEFAULT,
+                                  cancellable,
+                                  write_ready,
+                                  job);
+     return TRUE;
+}
+
+static void
+close_write_ready (GObject      *source_object,
+                   GAsyncResult *result,
+                   gpointer      user_data)
+{
+    gboolean        res;
+
+    GError          *error = NULL;
+    GVfsJob         *job = G_VFS_JOB (user_data);
+    GOutputStream   *stream = G_OUTPUT_STREAM (source_object);
+
+    res = g_output_stream_close_finish (stream,
+                                        result,
+                                        &error);
+    if (res == FALSE)
+      {
+        g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+        g_error_free (error);
+      }
+    else
+      g_vfs_job_succeeded (job);
+
+    g_object_unref (stream);
+}
+
+static void
+try_close_write (GVfsBackend         *backend,
+                 GVfsJobCloseWrite   *job,
+                 GVfsBackendHandle   handle)
+{
+    GOutputStream    *stream;
+
+    stream = G_OUTPUT_STREAM (handle);
+
+    g_output_stream_close_async (stream,
+                                 G_PRIORITY_DEFAULT,
+                                 G_VFS_JOB (job)->cancellable,
+                                 close_read_ready,
+                                 job);
+    return TRUE;
 }
 
 static void
@@ -821,6 +975,7 @@ do_delete (GVfsBackend      *backend,
            const char       *filename)
 {
     GVfsGDocsFile   *file;
+    GDataEntry      *entry;
 
     GError          *error = NULL;
     GCancellable    *cancellable = G_VFS_JOB (job)->cancellable;
@@ -837,10 +992,8 @@ do_delete (GVfsBackend      *backend,
         return;
       }
 
-    gdata_service_delete_entry (service,
-                                GDATA_ENTRY (g_vfs_gdocs_file_get_document_entry (file)),
-                                cancellable,
-                                &error);
+    entry = GDATA_ENTRY (g_vfs_gdocs_file_get_document_entry (file));
+    gdata_service_delete_entry (service, entry, cancellable, &error);
     if (error != NULL)
       {
         g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -848,8 +1001,7 @@ do_delete (GVfsBackend      *backend,
         return;
       }
 
-    g_debug ("%s :deleted\n",
-               gdata_entry_get_title (g_vfs_gdocs_file_get_document_entry (file)));
+    g_debug ("%s :deleted\n", gdata_entry_get_title (entry));
 
     g_vfs_job_succeeded (G_VFS_JOB (job));
 }
@@ -991,9 +1143,13 @@ do_push (GVfsBackend            *backend,
 
     g_debug ("Destination name:local path %s", local_path);
     local_file = g_file_new_for_path (local_path);
-    new_entry = gdata_documents_service_upload_document (GDATA_DOCUMENTS_SERVICE (service), NULL, local_file,
-                                                         folder_entry, cancellable, &error);
-    g_debug ("Test if working");
+    new_entry = gdata_documents_service_upload_document (GDATA_DOCUMENTS_SERVICE (
+                                                                            service),
+                                                         NULL,
+                                                         local_file,
+                                                         folder_entry,
+                                                         cancellable,
+                                                         &error);
     g_object_unref (entry);
     g_object_unref (local_file);
     if (new_entry != NULL)
@@ -1077,6 +1233,7 @@ do_create (GVfsBackend          *backend,
     GVfsGDocsFile           *parent_folder;
     GOutputStream           *output_stream;
     GDataDocumentsFolder    *folder_entry;
+    GVfsBackendGdocs        *gdocs_backend;
 
     GError                  *error = NULL;
     GDataDocumentsEntry     *entry = NULL;
@@ -1103,7 +1260,8 @@ do_create (GVfsBackend          *backend,
     content_type = g_file_info_get_content_type (file_info);
     title = g_file_info_get_display_name (file_info);
 
-    parent_folder = g_vfs_gdocs_file_new_parent_from_gvfs (G_VFS_BACKEND_GDOCS (backend),
+    gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
+    parent_folder = g_vfs_gdocs_file_new_parent_from_gvfs (gdocs_backend,
                                                            filename,
                                                            cancellable,
                                                            &error);
@@ -1115,7 +1273,8 @@ do_create (GVfsBackend          *backend,
             g_object_unref (file_info);
         return;
       }
-    folder_entry = GDATA_DOCUMENTS_FOLDER (g_vfs_gdocs_file_get_document_entry (parent_folder));
+    folder_entry = GDATA_DOCUMENTS_FOLDER (
+                            g_vfs_gdocs_file_get_document_entry (parent_folder));
     upload_uri = gdata_documents_service_get_upload_uri (folder_entry);
 
     output_stream = gdata_upload_stream_new (service,
@@ -1129,46 +1288,6 @@ do_create (GVfsBackend          *backend,
 
     g_vfs_job_open_for_write_set_can_seek (job, FALSE);
     g_vfs_job_open_for_write_set_handle (job, output_stream);
-    g_vfs_job_succeeded (G_VFS_JOB (job));
-}
-
-static void
-do_write (GVfsBackend       *backend,
-          GVfsJobWrite      *job,
-          GVfsBackendHandle _handle,
-          char              *buffer,
-          gsize             buffer_size)
-{
-    gssize              n_bytes;
-
-    GError              *error = NULL;
-    GCancellable        *cancellable = G_VFS_JOB (job)->cancellable;
-    GDataUploadStream   *output_stream = G_OUTPUT_STREAM (_handle);
-
-    n_bytes = g_output_stream_write (output_stream,
-                                     buffer,
-                                     buffer_size,
-                                     cancellable,
-                                     &error);
-    if (error != NULL)
-      {
-        g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-        g_error_free (error);
-        return;
-      }
-
-    if (n_bytes >= 0)
-        g_vfs_job_write_set_written_size (job, n_bytes);
-
-    g_vfs_job_succeeded (G_VFS_JOB (job));
-}
-
-static void
-do_close_write (GVfsBackend         *backend,
-                GVfsJobCloseWrite   *job,
-                GVfsBackendHandle   _handle)
-{
-    g_object_unref (_handle);
     g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
@@ -1191,10 +1310,10 @@ g_vfs_backend_gdocs_class_init (GVfsBackendGdocsClass *klass)
     backend_class->pull = do_pull;
     backend_class->push = do_push;
     backend_class->open_for_read = do_open_for_read;
-    backend_class->read = do_read;
-    backend_class->close_read = do_close_read;
-    backend_class->close_write = do_close_write;
-    backend_class->write = do_write;
+    backend_class->try_read = try_read;
+    backend_class->try_close_read = try_close_read;
+    backend_class->try_close_write = try_close_write;
+    backend_class->try_write = try_write;
     backend_class->query_info = do_query_info;
     backend_class->create = do_create;
     backend_class->set_display_name = do_set_display_name;

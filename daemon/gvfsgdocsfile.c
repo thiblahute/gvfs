@@ -881,7 +881,7 @@ g_vfs_gdocs_file_class_init (GVfsGDocsFileClass *klass)
                                                 "document-entry",
                                                 "The #GDataDocumentsEntry corresponding",
                                                 GDATA_TYPE_DOCUMENTS_ENTRY,
-                                                G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+                                                G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
     /**
      * GDataGDEmailAddress:label:
      *

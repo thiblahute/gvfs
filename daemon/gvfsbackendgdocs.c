@@ -339,6 +339,7 @@ do_move (GVfsBackend            *backend,
     gboolean                move_to_root = FALSE;
     GError                  *error = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
+    GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GDataDocumentsService   *service = G_VFS_BACKEND_GDOCS (backend)->service;
 
     new_entry = NULL;
@@ -348,13 +349,13 @@ do_move (GVfsBackend            *backend,
       {
         /* TODO, Implement it*/
         g_vfs_job_failed (G_VFS_JOB (job),
-                          G_IO_ERROR,
-                          G_IO_ERROR_CANT_CREATE_BACKUP,
-                          _("backups not supported yet"));
+                    G_IO_ERROR,
+                    G_IO_ERROR_CANT_CREATE_BACKUP,
+                    _("backups not supported yet"));
         return;
       }
 
-    source_file = g_vfs_gdocs_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend),
+    source_file = g_vfs_gdocs_file_new_from_gvfs (gdocs_backend,
                                                   source,
                                                   cancellable,
                                                   &error);
@@ -372,40 +373,38 @@ do_move (GVfsBackend            *backend,
 
     /* If we move a file to root without renaming it, the file shouldn't be in root*/
     if (g_strcmp0 (source_id, destination_id) == 0
-            && g_strcmp0 (destination_parent_id, "/") == 0
-            && g_strcmp0 (source_parent_id, "/") != 0)
-        move_to_root = TRUE;
+                && g_strcmp0 (destination_parent_id, "/") == 0
+                && g_strcmp0 (source_parent_id, "/") != 0)
+      move_to_root = TRUE;
 
     g_debug ("Source id: %s, destination ID: %s", source_id, destination_id);
     /* We check if we need to rename, if we need, the detination folder should be
      * the parent one*/
     if (g_strcmp0 (source_id, destination_id) != 0)
-        need_rename = TRUE;
+      need_rename = TRUE;
     else
-        destination_folder = g_vfs_gdocs_file_new_folder_from_gvfs (
-                                            G_VFS_BACKEND_GDOCS (backend),
-                                            destination_parent_id,
-                                            cancellable,
-                                            &error);
+      destination_folder = g_vfs_gdocs_file_new_folder_from_gvfs (gdocs_backend,
+                                                                  destination_parent_id,
+                                                                  cancellable,
+                                                                  &error);
     g_free (source_id);
     g_free (destination_id);
 
     if (!move_to_root)
       {
         if (destination_folder == NULL)
-            destination_folder = g_vfs_gdocs_file_new_folder_from_gvfs (
-                                                G_VFS_BACKEND_GDOCS (backend),
-                                                destination,
-                                                cancellable,
-                                                &error);
+          destination_folder = g_vfs_gdocs_file_new_folder_from_gvfs (gdocs_backend,
+                                                                      destination,
+                                                                      cancellable,
+                                                                      &error);
 
         /* If the destination is not a folder and the parent of the destination
          *  is the root, we rename the source file*/
         if (g_error_matches (error,
-                             G_IO_ERROR,
-                             G_IO_ERROR_NOT_DIRECTORY)
-                && g_strcmp0 (destination_parent_id, "/") == 0
-                && g_strcmp0 (source_parent_id, "/") != 0)
+                        G_IO_ERROR,
+                        G_IO_ERROR_NOT_DIRECTORY)
+                    && g_strcmp0 (destination_parent_id, "/") == 0
+                    && g_strcmp0 (source_parent_id, "/") != 0)
           {
             g_clear_error (&error);
             move = FALSE;
@@ -415,21 +414,23 @@ do_move (GVfsBackend            *backend,
 
     if (!move_to_root)
       {
+        GDataDocumentsEntry *tmp_entry;
         if (error != NULL)
           {
             g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
             g_error_free (error);
             if (destination_folder != NULL)
-                g_object_unref (destination_folder);
+              g_object_unref (destination_folder);
             return;
           }
 
         /*Move the document on the server*/
         entry = g_vfs_gdocs_file_get_document_entry (source_file);
-        folder_entry = GDATA_DOCUMENTS_FOLDER (
-                            g_vfs_gdocs_file_get_document_entry (destination_folder));
+        tmp_entry = g_vfs_gdocs_file_get_document_entry (destination_folder);
+        folder_entry = GDATA_DOCUMENTS_FOLDER (tmp_entry);
+
         g_debug ("destination_folder: %s",
-                   gdata_documents_entry_get_document_id (entry));
+                    gdata_documents_entry_get_document_id (entry));
         new_entry = gdata_documents_service_move_document_to_folder (service,
                                                                      entry,
                                                                      folder_entry,
@@ -446,18 +447,18 @@ do_move (GVfsBackend            *backend,
       }
     g_free (destination_parent_id);
     if (destination_folder != NULL) /* TODO check what is wrong with it*/
-        g_object_unref (destination_folder);
+      g_object_unref (destination_folder);
 
     if (move_to_root)
       {
+        GDataDocumentsEntry *tmp_entry;
         g_debug ("Is moving to root");
         /* we need to check for the error that could have
          * happend building the destination_folder*/
-        containing_folder = g_vfs_gdocs_file_new_parent_from_gvfs (
-                                            G_VFS_BACKEND_GDOCS (backend),
-                                            source,
-                                            cancellable,
-                                            &error);
+        containing_folder = g_vfs_gdocs_file_new_parent_from_gvfs (gdocs_backend,
+                                                                   source,
+                                                                   cancellable,
+                                                                   &error);
         if (error != NULL)
           {
             g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -466,12 +467,12 @@ do_move (GVfsBackend            *backend,
           }
 
         entry = g_vfs_gdocs_file_get_document_entry (source_file);
-        folder_entry = GDATA_DOCUMENTS_FOLDER (
-                            g_vfs_gdocs_file_get_document_entry (containing_folder));
+        tmp_entry = g_vfs_gdocs_file_get_document_entry (containing_folder);
+        folder_entry = GDATA_DOCUMENTS_FOLDER (tmp_entry);
+                    
         g_debug ("Moving %s out of %s",
-                   gdata_documents_entry_get_document_id (entry),
-                   gdata_documents_entry_get_document_id (GDATA_DOCUMENTS_ENTRY(
-                                                                        folder_entry)));
+                    gdata_documents_entry_get_document_id (entry),
+                    gdata_documents_entry_get_document_id (tmp_entry));
 
         new_entry = gdata_documents_service_remove_document_from_folder (service,
                                                                          entry,
@@ -492,7 +493,7 @@ do_move (GVfsBackend            *backend,
 
         g_debug ("Renaming file: %s", new_filename);
         if (new_entry == NULL)
-            new_entry = g_vfs_gdocs_file_get_document_entry (source_file);
+          new_entry = g_vfs_gdocs_file_get_document_entry (source_file);
 
         /*We rename the entry source entry*/
         gdata_entry_set_title (new_entry, new_filename);
@@ -525,9 +526,10 @@ do_set_display_name (GVfsBackend            *backend,
 
     GError                  *error = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
+    GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GDataDocumentsService   *service = G_VFS_BACKEND_GDOCS (backend)->service;
 
-    file = g_vfs_gdocs_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend),
+    file = g_vfs_gdocs_file_new_from_gvfs (gdocs_backend,
                                            filename,
                                            cancellable,
                                            &error);
@@ -556,7 +558,7 @@ do_set_display_name (GVfsBackend            *backend,
         g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
         g_error_free (error);
         if (renamed_entry != NULL)
-            g_object_unref (renamed_entry);
+          g_object_unref (renamed_entry);
         return;
       }
 
@@ -573,10 +575,10 @@ do_set_display_name (GVfsBackend            *backend,
 
 static void
 do_enumerate (GVfsBackend           *backend,
-              GVfsJobEnumerate      *job,
-              const char            *dirname,
-              GFileAttributeMatcher *matcher,
-              GFileQueryInfoFlags   query_flags)
+          GVfsJobEnumerate      *job,
+          const char            *dirname,
+          GFileAttributeMatcher *matcher,
+          GFileQueryInfoFlags   query_flags)
 {
     gchar                   *folder_id ;
     GList                   *entries; /*GDataDocumentsEntry*/
@@ -587,6 +589,7 @@ do_enumerate (GVfsBackend           *backend,
     gboolean                in_folder =  FALSE;
     GError                  *error = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
+    GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GDataDocumentsService   *service = G_VFS_BACKEND_GDOCS (backend)->service;
 
     /*Get documents properties*/
@@ -614,7 +617,7 @@ do_enumerate (GVfsBackend           *backend,
         g_error_free (error);
         g_free (folder_id);
         if (documents_feed != NULL)
-            g_object_unref (documents_feed);
+          g_object_unref (documents_feed);
         return;
       }
 
@@ -634,17 +637,18 @@ do_enumerate (GVfsBackend           *backend,
         /*We check that the file is in the selected folder (not in a child of it)*/
         if (g_strcmp0 (folder_id, parent_id) == 0 || in_folder)
           {
-            GVfsGDocsFile *file = g_vfs_gdocs_file_new_from_document_entry (
-                                            G_VFS_BACKEND_GDOCS (backend),
-                                            GDATA_ENTRY (entries->data),
-                                            &error);
+            GVfsGDocsFile *file;
+            GDataDocumentsEntry *tmp_entry = GDATA_DOCUMENTS_ENTRY (entries->data);
+            file = g_vfs_gdocs_file_new_from_document_entry (gdocs_backend,
+                                                             tmp_entry,
+                                                             &error);
             if (error != NULL)
               {
                 g_free (path);
                 g_free (parent_id);
                 g_clear_error (&error);
                 if (file =! NULL)
-                    g_object_unref (file);
+                  g_object_unref (file);
                 continue;
               }
 
@@ -672,26 +676,27 @@ do_enumerate (GVfsBackend           *backend,
 
 static void
 do_make_directory (GVfsBackend          *backend,
-                   GVfsJobMakeDirectory *job,
-                   const char           *filename)
+               GVfsJobMakeDirectory *job,
+               const char           *filename)
 {
     gchar                   *title;
     GDataCategory           *folder_category;
-    GDataDocumentsFolder    *folder, *new_folder;
-    GDataDocumentsEntry     *entry;
+    GDataDocumentsFolder    *folder;
+    GDataDocumentsEntry     *entry, *tmp_entry, *new_folder;
     GVfsGDocsFile           *destination_folder;
 
     GError                  *error = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
+    GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GDataDocumentsService   *service = G_VFS_BACKEND_GDOCS (backend)->service;
 
     title = g_path_get_basename (filename);
     if (g_strcmp0 (title, "/") == 0)
       {
         g_vfs_job_failed (G_VFS_JOB (job),
-                          G_IO_ERROR,
-                          G_IO_ERROR_NOT_SUPPORTED,
-                          _("Can't create a root directory"));
+                    G_IO_ERROR,
+                    G_IO_ERROR_NOT_SUPPORTED,
+                    _("Can't create a root directory"));
         g_free (title);
         return;
 
@@ -706,32 +711,32 @@ do_make_directory (GVfsBackend          *backend,
     g_object_unref (folder_category);
     g_free (title);
 
-    destination_folder = g_vfs_gdocs_file_new_parent_from_gvfs (
-                                G_VFS_BACKEND_GDOCS (backend),
-                                filename,
-                                cancellable,
-                                &error);
+    destination_folder = g_vfs_gdocs_file_new_parent_from_gvfs (gdocs_backend,
+                                                                filename,
+                                                                cancellable,
+                                                                &error);
     if (error != NULL)
       {
         g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
         g_error_free (error);
         g_object_unref (folder);
         if (destination_folder != NULL)
-            g_object_unref (destination_folder);
+          g_object_unref (destination_folder);
         return;
       }
-    entry = g_vfs_gdocs_file_get_document_entry (destination_folder),
-    new_folder = GDATA_DOCUMENTS_FOLDER (gdata_documents_service_upload_document (
-                                                        service,
-                                                        GDATA_DOCUMENTS_ENTRY (folder),
-                                                        NULL,
-                                                        entry,
-                                                        cancellable,
-                                                        &error));
+
+    entry = g_vfs_gdocs_file_get_document_entry (destination_folder);
+    tmp_entry = GDATA_DOCUMENTS_ENTRY (folder);
+    new_folder = gdata_documents_service_upload_document (service,
+                                                          tmp_entry,                                                
+                                                          NULL,
+                                                          entry,
+                                                          cancellable,
+                                                          &error);
     g_object_unref (folder);
     g_object_unref (destination_folder);
     if (new_folder != NULL)
-        g_object_unref (new_folder);
+      g_object_unref (new_folder);
 
     if (error != NULL)
       {
@@ -740,6 +745,7 @@ do_make_directory (GVfsBackend          *backend,
         return;
       }
 
+    g_error_free (error);
     g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
@@ -758,7 +764,7 @@ do_open_for_read (GVfsBackend           *backend,
 
     g_debug ("OPEN READ: %s\n", filename);
 
-    file = g_vfs_gdocs_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend),
+    file = g_vfs_gdocs_file_new_from_gvfs (gdocs_backend,
                                            filename,
                                            cancellable,
                                            &error);
@@ -1117,12 +1123,12 @@ do_push (GVfsBackend            *backend,
     GDataDocumentsFolder    *folder_entry = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
     GDataDocumentsService   *service = (G_VFS_BACKEND_GDOCS (backend)->service);
+    GVfsBackendGdocs    *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 
-    destination_folder = g_vfs_gdocs_file_new_parent_from_gvfs (
-                                                        G_VFS_BACKEND_GDOCS (backend),
-                                                        destination,
-                                                        cancellable,
-                                                        &error);
+    destination_folder = g_vfs_gdocs_file_new_parent_from_gvfs (gdocs_backend,
+                                                                destination,
+                                                                cancellable,
+                                                                &error);
     if (error != NULL)
       {
         g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -1143,8 +1149,7 @@ do_push (GVfsBackend            *backend,
 
     g_debug ("Destination name:local path %s", local_path);
     local_file = g_file_new_for_path (local_path);
-    new_entry = gdata_documents_service_upload_document (GDATA_DOCUMENTS_SERVICE (
-                                                                            service),
+    new_entry = gdata_documents_service_upload_document (service,
                                                          NULL,
                                                          local_file,
                                                          folder_entry,
@@ -1233,14 +1238,17 @@ do_create (GVfsBackend          *backend,
     GVfsGDocsFile           *parent_folder;
     GOutputStream           *output_stream;
     GDataDocumentsFolder    *folder_entry;
-    GVfsBackendGdocs        *gdocs_backend;
 
     GError                  *error = NULL;
     GDataDocumentsEntry     *entry = NULL;
+    GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 
     GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
     GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
 
+    /*  TODO 
+     *  Figure out how the content_type and title should be found
+     **/
     file = g_file_new_for_path (filename);
     file_info =  g_file_query_info (file,
                                     "standard::display-name,standard::content-type",
@@ -1256,11 +1264,9 @@ do_create (GVfsBackend          *backend,
             g_object_unref (file_info);
         return;
       }
-
     content_type = g_file_info_get_content_type (file_info);
     title = g_file_info_get_display_name (file_info);
 
-    gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     parent_folder = g_vfs_gdocs_file_new_parent_from_gvfs (gdocs_backend,
                                                            filename,
                                                            cancellable,
@@ -1273,8 +1279,9 @@ do_create (GVfsBackend          *backend,
             g_object_unref (file_info);
         return;
       }
-    folder_entry = GDATA_DOCUMENTS_FOLDER (
-                            g_vfs_gdocs_file_get_document_entry (parent_folder));
+
+    entry = g_vfs_gdocs_file_get_document_entry (parent_folder);
+    folder_entry = GDATA_DOCUMENTS_FOLDER (entry);
     upload_uri = gdata_documents_service_get_upload_uri (folder_entry);
 
     output_stream = gdata_upload_stream_new (service,

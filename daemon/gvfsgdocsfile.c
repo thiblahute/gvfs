@@ -156,6 +156,8 @@ g_vfs_gdocs_file_new_folder_from_gvfs (GVfsBackendGdocs *backend,
  * If the file doesn't exit, a G_IO_ERROR_NOT_FOUND is set.
  * If there was an error trying to get the feed, the server error is set.
  * An GDataDocumentsServiceError can also be set
+ *
+ * Returns: a new #GVfsGDocsFile, or %NULL
  **/
 GVfsGDocsFile *
 g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
@@ -167,7 +169,8 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
     GVfsGDocsFile            *self;
 
     gboolean                 entry_build = FALSE;
-    GDataDocumentsService    *service = G_VFS_BACKEND_GDOCS (backend)->service;
+    GDataDocumentsService    *service = g_vfs_backend_gdocs_get_service (backend);
+    GHashTable               *entries = g_vfs_backend_gdocs_get_entries (backend);
 
     g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
     g_return_val_if_fail (gvfs_path != NULL, NULL);
@@ -177,7 +180,7 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
     /* if the GHashTable which make the link between an entry-id and a type is empty,
      * we build it
      **/
-    if (g_hash_table_size (backend->entries) == 0)
+    if (g_hash_table_size (entries) == 0)
       {
         g_vfs_backend_gdocs_rebuild_entries (backend, cancellable, error);
         if (*error != NULL)
@@ -188,7 +191,7 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
         entry_build = TRUE;
       }
 
-    self = g_hash_table_lookup (backend->entries, entry_id);
+    self = g_hash_table_lookup (entries, entry_id);
 
     /* If the entry hasn't been found, we rebuild the GHashTable*/
     if (self == NULL && entry_build == FALSE)
@@ -199,7 +202,7 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
             g_free (entry_id);
             return NULL;
           }
-        self = g_hash_table_lookup (backend->entries, entry_id);
+        self = g_hash_table_lookup (entries, entry_id);
       }
 
     if (self == NULL)
@@ -650,16 +653,15 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *self,
                                 GCancellable    *cancellable,
                                 GError          **error)
 {
-    GDataDocumentsFeed *tmp_feed = NULL;
-    GDataDocumentsEntry *entry;
-    GDataDocumentsService *service;
-    GFile *new_file;
+    GFile                   *new_file;
+    GDataDocumentsFeed      *tmp_feed;
+
+    GVfsBackendGdocs        *backend = self->priv->backend;
+    GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
+    GDataDocumentsEntry     *entry = g_vfs_gdocs_file_get_document_entry (self);
 
     g_return_val_if_fail (G_VFS_IS_GDOCS_FILE (self), NULL);
     g_return_val_if_fail (local_path != NULL, NULL);
-
-    entry = g_vfs_gdocs_file_get_document_entry (self);
-    service = G_VFS_BACKEND_GDOCS (self->priv->backend)->service;
 
     if (g_vfs_gdocs_file_is_folder (self))
         {

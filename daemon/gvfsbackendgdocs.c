@@ -56,17 +56,23 @@
 #define CLIENT_ID "ytapi-GNOME-libgdata-444fubtt-0"
 
 G_DEFINE_TYPE (GVfsBackendGdocs, g_vfs_backend_gdocs, G_VFS_TYPE_BACKEND)
+#define G_VFS_BACKEND_GDOCS_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), \
+                G_VFS_TYPE_BACKEND_GDOCS, GVfsBackendGdocsPrivate))
+
+/*Private structure*/
+struct _GVfsBackendGdocsPrivate {
+    GDataDocumentsService	*service;
+    GHashTable				*entries;
+};
 
 static void
 g_vfs_backend_gdocs_finalize (GObject *object)
 {
-    /*TODO Check if I use it*/
-    GVfsBackendGdocs *backend;
+    GVfsBackendGdocsPrivate *priv = G_VFS_BACKEND_GDOCS_GET_PRIVATE (object);
 
-    backend = G_VFS_BACKEND_GDOCS (object);
-    g_hash_table_destroy (backend->entries);
-    if (backend->service != NULL )
-        g_object_unref (backend->service);
+    g_hash_table_destroy (priv->entries);
+    if (priv->service != NULL )
+        g_object_unref (priv->service);
 
     G_OBJECT_CLASS (g_vfs_backend_gdocs_parent_class)->finalize (object);
 }
@@ -76,26 +82,47 @@ g_vfs_backend_gdocs_finalize (GObject *object)
 static void
 g_vfs_backend_gdocs_init (GVfsBackendGdocs *backend)
 {
-    backend->service = gdata_documents_service_new (CLIENT_ID);
-    backend->entries = g_hash_table_new_full (g_str_hash,
-                                              g_str_equal,
-                                              NULL,
-                                              g_object_unref);
+    backend->priv = G_TYPE_INSTANCE_GET_PRIVATE (backend,
+                                                 G_VFS_TYPE_BACKEND_GDOCS,
+                                                 GVfsBackendGdocsPrivate);
+    backend->priv->service = gdata_documents_service_new (CLIENT_ID);
+    backend->priv->entries = g_hash_table_new_full (g_str_hash,
+                                                    g_str_equal,
+                                                    NULL,
+                                                    g_object_unref);
 }
 
 /* ************************************************************************* */
 /* public utility functions */
+
+GHashTable *
+g_vfs_backend_gdocs_get_entries (GVfsBackendGdocs *backend)
+{
+    g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
+    
+    return backend->priv->entries;
+}
+
+GDataDocumentsService *
+g_vfs_backend_gdocs_get_service (GVfsBackendGdocs *backend)
+{
+    g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
+
+    return backend->priv->service;
+}
+
 void
 g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
                                      GCancellable       *cancellable,
                                      GError             **error)
 {
-    GList                   *entries;
+    GList                   *list_entry;
     GDataDocumentsQuery     *query;
     GDataDocumentsFeed      *tmp_feed;
     GVfsGDocsFile           *root_file;
 
-    GDataDocumentsService   *service = backend->service;
+    GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
+    GHashTable              *entries = g_vfs_backend_gdocs_get_entries (backend);
 
     /*Get all entries (as feed) on the server*/
     query = gdata_documents_query_new (NULL);
@@ -115,12 +142,12 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
         return;
       }
 
-    entries = gdata_feed_get_entries (GDATA_FEED (tmp_feed));
-    for (NULL; entries != NULL; entries = entries->next)
+    list_entry = gdata_feed_get_entries (GDATA_FEED (tmp_feed));
+    for (NULL; list_entry != NULL; list_entry = list_entry->next)
       {
-        GDataDocumentsEntry *document_entry = GDATA_DOCUMENTS_ENTRY (entries->data);
+        GDataDocumentsEntry *document_entry = GDATA_DOCUMENTS_ENTRY (list_entry->data);
         const gchar *entry_id = gdata_documents_entry_get_document_id (document_entry);
-        g_hash_table_insert (backend->entries,
+        g_hash_table_insert (entries,
                              entry_id,
                              g_vfs_gdocs_file_new_from_document_entry (backend,
                                                                        document_entry,
@@ -131,7 +158,7 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
     root_file = g_vfs_gdocs_file_new_from_document_entry (backend,
                                                           NULL,
                                                           NULL);
-    g_hash_table_insert (backend->entries,
+    g_hash_table_insert (entries,
                          "/",
                          root_file);
 }
@@ -145,18 +172,18 @@ do_mount (GVfsBackend   *backend,
           GMountSource  *mount_source,
           gboolean      is_automount)
 {
-    gchar               *ask_user, *ask_password, *display_name;
-    const gchar         *username, *host;
-    gboolean            aborted, retval;
-    GMountSpec          *gdocs_mount_spec;
-    GAskPasswordFlags   flags;
+    gchar                   *ask_user, *ask_password, *display_name;
+    const gchar             *username, *host;
+    gboolean                aborted, retval;
+    GMountSpec              *gdocs_mount_spec;
+    GAskPasswordFlags       flags;
 
-    gchar               *prompt = NULL;
-    gchar               *full_username = NULL;
-    GError              *error = NULL;
-    gboolean            show_dialog = TRUE;
-    GPasswordSave       password_save_flags = G_PASSWORD_SAVE_NEVER;
-    GVfsBackendGdocs    *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
+    gchar                   *prompt = NULL;
+    gchar                   *full_username = NULL;
+    GError                  *error = NULL;
+    gboolean                show_dialog = TRUE;
+    GPasswordSave           password_save_flags = G_PASSWORD_SAVE_NEVER;
+    GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
 
     /*Get usename*/
     username = g_mount_spec_get (mount_spec, "user");
@@ -263,7 +290,7 @@ do_mount (GVfsBackend   *backend,
         g_debug ("-> Username: %s\n", full_username);
         g_debug ("password: ***\n");
         
-        retval = gdata_service_authenticate (GDATA_SERVICE (gdocs_backend->service),
+        retval = gdata_service_authenticate (GDATA_SERVICE (service),
                                              full_username,
                                              ask_password,
                                              NULL,
@@ -303,8 +330,7 @@ do_mount (GVfsBackend   *backend,
         if (g_vfs_keyring_is_available ())
             flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
 
-        prompt = g_strdup_printf (_("Your password was wrong, please enter %s's\
-                                  google documents password again"),
+        prompt = g_strdup_printf (_("Wrong password, enter %s's password again."),
                                   full_username);
         show_dialog = TRUE;
         g_clear_error (&error);
@@ -340,7 +366,7 @@ do_move (GVfsBackend            *backend,
     GError                  *error = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
     GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
-    GDataDocumentsService   *service = G_VFS_BACKEND_GDOCS (backend)->service;
+    GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
 
     new_entry = NULL;
     destination_folder = NULL;
@@ -430,7 +456,7 @@ do_move (GVfsBackend            *backend,
         folder_entry = GDATA_DOCUMENTS_FOLDER (tmp_entry);
 
         g_debug ("destination_folder: %s",
-                    gdata_documents_entry_get_document_id (entry));
+                 gdata_documents_entry_get_document_id (entry));
         new_entry = gdata_documents_service_move_document_to_folder (service,
                                                                      entry,
                                                                      folder_entry,
@@ -527,7 +553,7 @@ do_set_display_name (GVfsBackend            *backend,
     GError                  *error = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
     GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
-    GDataDocumentsService   *service = G_VFS_BACKEND_GDOCS (backend)->service;
+    GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
 
     file = g_vfs_gdocs_file_new_from_gvfs (gdocs_backend,
                                            filename,
@@ -590,7 +616,7 @@ do_enumerate (GVfsBackend           *backend,
     GError                  *error = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
     GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
-    GDataDocumentsService   *service = G_VFS_BACKEND_GDOCS (backend)->service;
+    GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
 
     /*Get documents properties*/
     query = gdata_documents_query_new (NULL);
@@ -688,7 +714,7 @@ do_make_directory (GVfsBackend          *backend,
     GError                  *error = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
     GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
-    GDataDocumentsService   *service = G_VFS_BACKEND_GDOCS (backend)->service;
+    GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
 
     title = g_path_get_basename (filename);
     if (g_strcmp0 (title, "/") == 0)
@@ -761,6 +787,7 @@ do_open_for_read (GVfsBackend           *backend,
     GError              *error = NULL;
     GCancellable        *cancellable = G_VFS_JOB (job)->cancellable;
     GVfsBackendGdocs    *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
+    GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
 
     g_debug ("OPEN READ: %s\n", filename);
 
@@ -785,7 +812,7 @@ do_open_for_read (GVfsBackend           *backend,
       }
 
     /*Won't start downnloading untils g_input_stream_read_* is called*/
-    stream = gdata_download_stream_new (GDATA_SERVICE (gdocs_backend->service), uri);
+    stream = gdata_download_stream_new (service, uri);
     g_free (uri);
 
     g_vfs_job_open_for_read_set_handle (job, stream);
@@ -985,7 +1012,7 @@ do_delete (GVfsBackend      *backend,
 
     GError          *error = NULL;
     GCancellable    *cancellable = G_VFS_JOB (job)->cancellable;
-    GDataService    *service = G_VFS_BACKEND_GDOCS (backend)->service;
+    GDataService    *service = g_vfs_backend_gdocs_get_service (backend);
 
     file = g_vfs_gdocs_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend),
                                            filename,
@@ -1063,7 +1090,7 @@ do_replace (GVfsBackend         *backend,
 
     GError                  *error = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
-    GDataDocumentsService   *service = G_VFS_BACKEND_GDOCS (backend)->service;
+    GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
 
     if (make_backup)
       {
@@ -1122,8 +1149,8 @@ do_push (GVfsBackend            *backend,
     GError                  *error = NULL;
     GDataDocumentsFolder    *folder_entry = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
-    GDataDocumentsService   *service = (G_VFS_BACKEND_GDOCS (backend)->service);
-    GVfsBackendGdocs    *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
+    GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
+    GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
 
     destination_folder = g_vfs_gdocs_file_new_parent_from_gvfs (gdocs_backend,
                                                                 destination,
@@ -1187,7 +1214,6 @@ do_pull (GVfsBackend            *backend,
     gchar                   *content_type = NULL;
     gboolean                replace_if_exists = FALSE;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
-    GDataDocumentsService   *service = G_VFS_BACKEND_GDOCS (backend)->service;
 
     file =  g_vfs_gdocs_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend),
                                             source,
@@ -1244,7 +1270,7 @@ do_create (GVfsBackend          *backend,
     GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
 
     GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
-    GDataDocumentsService *service = G_VFS_BACKEND_GDOCS (backend)->service;
+    GDataDocumentsService *service = g_vfs_backend_gdocs_get_service (backend);
 
     /*  TODO 
      *  Figure out how the content_type and title should be found
@@ -1301,8 +1327,10 @@ do_create (GVfsBackend          *backend,
 static void
 g_vfs_backend_gdocs_class_init (GVfsBackendGdocsClass *klass)
 {
-    GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
     GVfsBackendClass *backend_class;
+    GObjectClass     *gobject_class = G_OBJECT_CLASS (klass);
+
+    g_type_class_add_private (klass, sizeof (GVfsBackendGdocsPrivate));
 
     gobject_class->finalize  = g_vfs_backend_gdocs_finalize;
 

@@ -38,6 +38,7 @@ G_BEGIN_DECLS
 
 typedef struct _GVfsBackendGdocs        GVfsBackendGdocs;
 typedef struct _GVfsBackendGdocsClass   GVfsBackendGdocsClass;
+typedef struct _GVfsBackendGdocsPrivate GVfsBackendGdocsPrivate;
 
 GType g_vfs_backend_gdocs_get_type (void) G_GNUC_CONST;
 
@@ -49,10 +50,11 @@ struct _GVfsBackendGdocsClass
 struct _GVfsBackendGdocs
 {
     GVfsBackend				parent_instance;
-    GDataDocumentsService	*service;
-    GHashTable				*entries;
+    GVfsBackendGdocsPrivate *priv;
 };
 
+GHashTable *g_vfs_backend_gdocs_get_entries (GVfsBackendGdocs *backend);
+GDataDocumentsService *g_vfs_backend_gdocs_get_service (GVfsBackendGdocs *backend);
 void g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs  *backend,
                                           GCancellable      *cancellable,
                                           GError            **error);

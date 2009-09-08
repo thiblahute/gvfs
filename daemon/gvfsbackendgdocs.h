@@ -29,12 +29,18 @@
 
 G_BEGIN_DECLS
 
-#define G_VFS_TYPE_BACKEND_GDOCS         (g_vfs_backend_gdocs_get_type ())
-#define G_VFS_BACKEND_GDOCS(o)           (G_TYPE_CHECK_INSTANCE_CAST ((o), G_VFS_TYPE_BACKEND_GDOCS, GVfsBackendGdocs))
-#define G_VFS_BACKEND_GDOCS_CLASS(k)     (G_TYPE_CHECK_CLASS_CAST((k), G_VFS_TYPE_BACKEND_GDOCS, GVfsBackendGdocsClass))
-#define G_VFS_IS_BACKEND_GDOCS(o)        (G_TYPE_CHECK_INSTANCE_TYPE ((o), G_VFS_TYPE_BACKEND_GDOCS))
-#define G_VFS_IS_BACKEND_GDOCS_CLASS(k)  (G_TYPE_CHECK_CLASS_TYPE ((k), G_VFS_TYPE_BACKEND_GDOCS))
-#define G_VFS_BACKEND_GDOCS_GET_CLASS(o) (G_TYPE_INSTANCE_GET_CLASS ((o), G_VFS_TYPE_BACKEND_GDOCS, GVfsBackendGdocsClass))
+#define G_VFS_TYPE_BACKEND_GDOCS\
+    (g_vfs_backend_gdocs_get_type ())
+#define G_VFS_BACKEND_GDOCS(o)\
+    (G_TYPE_CHECK_INSTANCE_CAST ((o), G_VFS_TYPE_BACKEND_GDOCS, GVfsBackendGdocs))
+#define G_VFS_BACKEND_GDOCS_CLASS(k)\
+    (G_TYPE_CHECK_CLASS_CAST((k), G_VFS_TYPE_BACKEND_GDOCS, GVfsBackendGdocsClass))
+#define G_VFS_IS_BACKEND_GDOCS(o)\
+    (G_TYPE_CHECK_INSTANCE_TYPE ((o), G_VFS_TYPE_BACKEND_GDOCS))
+#define G_VFS_IS_BACKEND_GDOCS_CLASS(k)\
+    (G_TYPE_CHECK_CLASS_TYPE ((k), G_VFS_TYPE_BACKEND_GDOCS))
+#define G_VFS_BACKEND_GDOCS_GET_CLASS(o)\
+    (G_TYPE_INSTANCE_GET_CLASS ((o), G_VFS_TYPE_BACKEND_GDOCS, GVfsBackendGdocsClass))
 
 typedef struct _GVfsBackendGdocs        GVfsBackendGdocs;
 typedef struct _GVfsBackendGdocsClass   GVfsBackendGdocsClass;
@@ -53,8 +59,8 @@ struct _GVfsBackendGdocs
     GVfsBackendGdocsPrivate *priv;
 };
 
-GHashTable *g_vfs_backend_gdocs_get_entries (GVfsBackendGdocs *backend);
-GDataDocumentsService *g_vfs_backend_gdocs_get_service (GVfsBackendGdocs *backend);
+GHashTable *g_vfs_backend_gdocs_get_entries (const GVfsBackendGdocs *backend);
+GDataDocumentsService *g_vfs_backend_gdocs_get_service (const GVfsBackendGdocs *backend);
 void g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs  *backend,
                                           GCancellable      *cancellable,
                                           GError            **error);

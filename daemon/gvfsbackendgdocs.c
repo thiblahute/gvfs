@@ -85,6 +85,7 @@ g_vfs_backend_gdocs_init (GVfsBackendGdocs *backend)
     backend->priv = G_TYPE_INSTANCE_GET_PRIVATE (backend,
                                                  G_VFS_TYPE_BACKEND_GDOCS,
                                                  GVfsBackendGdocsPrivate);
+
     backend->priv->service = gdata_documents_service_new (CLIENT_ID);
     backend->priv->entries = g_hash_table_new_full (g_str_hash,
                                                     g_str_equal,
@@ -96,7 +97,7 @@ g_vfs_backend_gdocs_init (GVfsBackendGdocs *backend)
 /* public utility functions */
 
 GHashTable *
-g_vfs_backend_gdocs_get_entries (GVfsBackendGdocs *backend)
+g_vfs_backend_gdocs_get_entries (const GVfsBackendGdocs *backend)
 {
     g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
     
@@ -104,7 +105,7 @@ g_vfs_backend_gdocs_get_entries (GVfsBackendGdocs *backend)
 }
 
 GDataDocumentsService *
-g_vfs_backend_gdocs_get_service (GVfsBackendGdocs *backend)
+g_vfs_backend_gdocs_get_service (const GVfsBackendGdocs *backend)
 {
     g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
 
@@ -116,9 +117,9 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
                                      GCancellable       *cancellable,
                                      GError             **error)
 {
-    GList                   *list_entry;
+    GList                   *list_entries;
     GDataDocumentsQuery     *query;
-    GDataDocumentsFeed      *tmp_feed;
+    GDataDocumentsFeed      *documents_feed;
     GVfsGDocsFile           *root_file;
 
     GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
@@ -127,25 +128,25 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
     /*Get all entries (as feed) on the server*/
     query = gdata_documents_query_new (NULL);
     gdata_documents_query_set_show_folders (query, TRUE);
-    tmp_feed = gdata_documents_service_query_documents (service,
-                                                        query,
-                                                        cancellable,
-                                                        NULL,
-                                                        NULL,
-                                                        error);
+    documents_feed = gdata_documents_service_query_documents (service,
+                                                              query,
+                                                              cancellable,
+                                                              NULL,
+                                                              NULL,
+                                                              error);
     g_object_unref (query);
 
     if (*error != NULL)
       {
-        if (tmp_feed != NULL)
-            g_object_unref (tmp_feed);
+        if (documents_feed != NULL)
+            g_object_unref (documents_feed);
         return;
       }
 
-    list_entry = gdata_feed_get_entries (GDATA_FEED (tmp_feed));
-    for (NULL; list_entry != NULL; list_entry = list_entry->next)
+    list_entries = gdata_feed_get_entries (GDATA_FEED (documents_feed));
+    for (NULL; list_entries != NULL; list_entries = list_entries->next)
       {
-        GDataDocumentsEntry *document_entry = GDATA_DOCUMENTS_ENTRY (list_entry->data);
+        GDataDocumentsEntry *document_entry = GDATA_DOCUMENTS_ENTRY (list_entries->data);
         const gchar *entry_id = gdata_documents_entry_get_document_id (document_entry);
         g_hash_table_insert (entries,
                              entry_id,
@@ -153,6 +154,7 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
                                                                        document_entry,
                                                                        NULL));
       }
+    g_object_unref (documents_feed);
 
     /*We add the root folder so we don't have problem querying it afterward*/
     root_file = g_vfs_gdocs_file_new_from_document_entry (backend,
@@ -397,15 +399,17 @@ do_move (GVfsBackend            *backend,
     destination_id = g_path_get_basename (destination);
     destination_parent_id = g_path_get_parent_basename (destination);
 
-    /* If we move a file to root without renaming it, the file shouldn't be in root*/
+    /* If we move a file to root without renaming it
+     * We check that the file isn't in root */
     if (g_strcmp0 (source_id, destination_id) == 0
                 && g_strcmp0 (destination_parent_id, "/") == 0
                 && g_strcmp0 (source_parent_id, "/") != 0)
       move_to_root = TRUE;
 
     g_debug ("Source id: %s, destination ID: %s", source_id, destination_id);
-    /* We check if we need to rename, if we need, the detination folder should be
-     * the parent one*/
+
+    /* We check if we need to rename, if we need, the destination folder should be
+     * the parent one */
     if (g_strcmp0 (source_id, destination_id) != 0)
       need_rename = TRUE;
     else
@@ -607,7 +611,7 @@ do_enumerate (GVfsBackend           *backend,
           GFileQueryInfoFlags   query_flags)
 {
     gchar                   *folder_id ;
-    GList                   *entries; /*GDataDocumentsEntry*/
+    GList                   *list_entries; /*GDataDocumentsEntry*/
     GFileInfo               *info;
     GDataDocumentsFeed      *documents_feed;
     GDataDocumentsQuery     *query ;
@@ -617,6 +621,7 @@ do_enumerate (GVfsBackend           *backend,
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
     GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
+    GHashTable              *entries = g_vfs_backend_gdocs_get_entries (backend);
 
     /*Get documents properties*/
     query = gdata_documents_query_new (NULL);
@@ -650,13 +655,13 @@ do_enumerate (GVfsBackend           *backend,
     g_vfs_job_succeeded (G_VFS_JOB (job));
 
     /*List documents*/
-    entries = gdata_feed_get_entries (GDATA_FEED (documents_feed));
-    for (NULL; entries != NULL; entries = entries->next)
+    list_entries = gdata_feed_get_entries (GDATA_FEED (documents_feed));
+    for (NULL; list_entries != NULL; list_entries = list_entries->next)
       {
         gchar *path, *parent_id;
 
         info = NULL;
-        path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (entries->data));
+        path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (list_entries->data));
         parent_id = g_path_get_parent_basename (path);
 
         //g_debug ("Path: %s folder ID %s, parent_id: %s", folder_id, parent_id);
@@ -664,7 +669,10 @@ do_enumerate (GVfsBackend           *backend,
         if (g_strcmp0 (folder_id, parent_id) == 0 || in_folder)
           {
             GVfsGDocsFile *file;
-            GDataDocumentsEntry *tmp_entry = GDATA_DOCUMENTS_ENTRY (entries->data);
+
+            GDataDocumentsEntry *tmp_entry = GDATA_DOCUMENTS_ENTRY (list_entries->data);
+            const gchar *entry_id = gdata_documents_entry_get_document_id (tmp_entry);
+
             file = g_vfs_gdocs_file_new_from_document_entry (gdocs_backend,
                                                              tmp_entry,
                                                              &error);
@@ -678,6 +686,11 @@ do_enumerate (GVfsBackend           *backend,
                 continue;
               }
 
+            /*We keep the GHashTable::entries up to date*/
+            g_hash_table_insert (entries,
+                                 entry_id,
+                                 file);                                 
+
             info = g_vfs_gdocs_file_get_info (file, info, matcher, &error);
             if (error != NULL)
               {
@@ -688,7 +701,6 @@ do_enumerate (GVfsBackend           *backend,
                 continue;
               }
 
-            g_object_unref (file);
             g_vfs_job_enumerate_add_info (job, info);
           }
         g_free (path);
@@ -696,6 +708,7 @@ do_enumerate (GVfsBackend           *backend,
 
       }
 
+    g_object_unref (documents_feed);
     g_free (folder_id);
     g_vfs_job_enumerate_done (job);
 }
@@ -811,7 +824,7 @@ do_open_for_read (GVfsBackend           *backend,
         return;
       }
 
-    /*Won't start downnloading untils g_input_stream_read_* is called*/
+    /*Won't start downnloading until g_input_stream_read_* is called*/
     stream = gdata_download_stream_new (service, uri);
     g_free (uri);
 
@@ -1007,12 +1020,14 @@ do_delete (GVfsBackend      *backend,
            GVfsJobDelete    *job,
            const char       *filename)
 {
-    GVfsGDocsFile   *file;
-    GDataEntry      *entry;
+    GVfsGDocsFile           *file;
+    GDataDocumentsEntry     *entry;
+    const gchar             *entry_id;
 
-    GError          *error = NULL;
-    GCancellable    *cancellable = G_VFS_JOB (job)->cancellable;
-    GDataService    *service = g_vfs_backend_gdocs_get_service (backend);
+    GError                  *error = NULL;
+    GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
+    GDataService            *service = g_vfs_backend_gdocs_get_service (backend);
+    GHashTable              *entries = g_vfs_backend_gdocs_get_entries (backend);
 
     file = g_vfs_gdocs_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend),
                                            filename,
@@ -1025,8 +1040,8 @@ do_delete (GVfsBackend      *backend,
         return;
       }
 
-    entry = GDATA_ENTRY (g_vfs_gdocs_file_get_document_entry (file));
-    gdata_service_delete_entry (service, entry, cancellable, &error);
+    entry = g_vfs_gdocs_file_get_document_entry (file);
+    gdata_service_delete_entry (service, GDATA_ENTRY (entry), cancellable, &error);
     if (error != NULL)
       {
         g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -1035,6 +1050,10 @@ do_delete (GVfsBackend      *backend,
       }
 
     g_debug ("%s :deleted\n", gdata_entry_get_title (entry));
+
+    /* We keep the #GHashTable::entries property up to date*/
+    entry_id = gdata_documents_entry_get_document_id (entry);
+    g_hash_table_remove (entries, entry_id);
 
     g_vfs_job_succeeded (G_VFS_JOB (job));
 }
@@ -1142,15 +1161,17 @@ do_push (GVfsBackend            *backend,
          gpointer               progress_callback_data)
 {
     gchar                   *destination_filename;
+    const gchar             *entry_id;
     GDataDocumentsEntry     *entry, *new_entry;
     GFile                   *local_file;
-    GVfsGDocsFile           *destination_folder;
+    GVfsGDocsFile           *destination_folder, new_file;
 
     GError                  *error = NULL;
     GDataDocumentsFolder    *folder_entry = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
     GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
+    GHashTable              *entries = g_vfs_backend_gdocs_get_entries (backend);
 
     destination_folder = g_vfs_gdocs_file_new_parent_from_gvfs (gdocs_backend,
                                                                 destination,
@@ -1184,15 +1205,24 @@ do_push (GVfsBackend            *backend,
                                                          &error);
     g_object_unref (entry);
     g_object_unref (local_file);
-    if (new_entry != NULL)
-        g_object_unref (new_entry);
 
     if (error != NULL)
       {
         g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
         g_error_free (error);
+        if (new_entry != NULL)
+            g_object_unref (new_entry);
         return;
       }
+
+    /* We keep the #GHashTable::entries property up to date */
+    entry_id = gdata_documents_entry_get_document_id (new_entry);
+    g_hash_table_insert (entries,
+                         entry_id,
+                         g_vfs_gdocs_file_new_from_document_entry (backend,
+                                                                   new_entry,
+                                                                   NULL));
+    g_object_unref (entry);
 
     g_vfs_job_succeeded (G_VFS_JOB (job));
 }

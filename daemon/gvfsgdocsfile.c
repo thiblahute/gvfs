@@ -22,7 +22,7 @@
 
 /**
  * SECTION:gvfsgdocsfile
- * @short_description: This class maps between GVfs paths and the actual entry google server.
+ * @short_description: This class maps between GVfs paths and the actual entry on the server.
  * @stability: Unstable
  * @include: daemon/gvfsdatafile.h
  */
@@ -95,7 +95,7 @@ g_path_get_parent_basename (const gchar *gvfs_path)
 /**
  * g_vfs_gdocs_file_new_folder_from_gvfs:
  *
- * @backend: the gdocs backend this #GVfsGdocsFile is to be used on
+ * @backend: the gdocs backend the new #GVfsGDocsFile is to be used on
  * @gvfs_path: gvfs path to create the #GVfsGDocsFile from
  * @cancellable: a #GCancellable or %NULL
  * @error: a #GError or %NULL
@@ -144,7 +144,7 @@ g_vfs_gdocs_file_new_folder_from_gvfs (GVfsBackendGdocs *backend,
 
 /**
  * g_vfs_gdocs_file_new_from_gvfs:
- * @backend: the gdocs backend this #GVfsGdocsFile is to be used on
+ * @backend: the gdocs backend this #GVfsGDocsFile is to be used on
  * @gvfs_path: gvfs path to create the file from
  * @cancellable: a GCancellable or %NULL
  * @error: a GError or %NULL
@@ -165,8 +165,8 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
                                 GCancellable        *cancellable,
                                 GError              **error)
 {
-    gchar                    *entry_id;
     GVfsGDocsFile            *self;
+    gchar                    *entry_id;
 
     gboolean                 entry_build = FALSE;
     GDataDocumentsService    *service = g_vfs_backend_gdocs_get_service (backend);
@@ -177,8 +177,8 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
 
     entry_id = g_path_get_basename (gvfs_path);
 
-    /* if the GHashTable which make the link between an entry-id and a type is empty,
-     * we build it
+    /* if the GHashTable which makes the link between an entry-id and a type is empty,
+     * we build it.
      **/
     if (g_hash_table_size (entries) == 0)
       {
@@ -204,6 +204,7 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
           }
         self = g_hash_table_lookup (entries, entry_id);
       }
+    g_free (entry_id);
 
     if (self == NULL)
       {
@@ -225,17 +226,24 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
  *
  * Constructs a new #GVfsGDocsFile representing the given gdocs path.
  *
+ * If the document_entry is not an handled #GDataDocumentsEntry,
+ * a G_IO_ERROR_NOT_SUPPORTED error is set;
+ * 
+ * If the @document_entry is %NULL, the newly created #GVfsGDocsFile is the root folder.
+ *
  * Returns: a new #GVfsGDocsFile
- * if the document_entry is not an handled #GDataDocumentsEntry, a G_IO_ERROR_NOT_FOUND error is set;
  **/
 GVfsGDocsFile *
 g_vfs_gdocs_file_new_from_document_entry (GVfsBackendGdocs      *backend,
                                           GDataDocumentsEntry   *document_entry,
                                           GError                **error)
 {
+    GVfsGDocsFile *self;
     gchar *gvfs_path;
 
     g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
+    g_return_val_if_fail (document_entry == NULL
+                          || GDATA_IS_DOCUMENTS_ENTRY (document_entry), NULL);
 
     /*Root file*/
     if (document_entry == NULL)
@@ -245,34 +253,39 @@ g_vfs_gdocs_file_new_from_document_entry (GVfsBackendGdocs      *backend,
                              "gvfs-path", "/",
                              NULL);
 
-    g_return_val_if_fail (GDATA_IS_DOCUMENTS_ENTRY (document_entry), NULL);
-
     if (GDATA_IS_DOCUMENTS_ENTRY (document_entry))
         gvfs_path = gdata_documents_entry_get_path (document_entry);
     else
       {
-        g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, "Not found a document");
+        g_set_error (error,
+                     G_IO_ERROR, 
+                     G_IO_ERROR_NOT_SUPPORTED,
+                     "Not a supported document type");
+        g_free (gvfs_path);
         return NULL;
       }
 
-    return g_object_new (G_VFS_TYPE_GDOCS_FILE,
+    self = g_object_new (G_VFS_TYPE_GDOCS_FILE,
                          "backend", backend,
                          "document-entry", document_entry,
                          "gvfs-path", gvfs_path,
                          NULL);
+    g_free (gvfs_path);
+
+    return self;
 }
 
 /**
  * g_vfs_gdocs_file_new_parent:
- * @self: #GVfsGdocsFile to get the parent directory from
+ * @self: #GVfsGDocsFile to get the parent directory from
  * @cancellable: a GCancellable or %NULL
  * @error: GError or %NULL
  *
- * Creates a new #GVfsGdocsFile to represent the parent directory of @self. If @self's parent is
- * the root directory, the new #GVfsGdocsFile will also reference
+ * Creates a new #GVfsGDocsFile to represent the parent directory of @self. If @self's parent is
+ * the root directory, the new #GVfsGDocsFile will also reference
  * the root.
  *
- * Returns: a new #GVfsGdocsFile representing the parent directory of @self
+ * Returns: a new #GVfsGDocsFile representing the parent directory of @self
  **/
 GVfsGDocsFile *
 g_vfs_gdocs_file_new_parent (GVfsBackendGdocs       *backend,
@@ -288,20 +301,19 @@ g_vfs_gdocs_file_new_parent (GVfsBackendGdocs       *backend,
 
 /**
  * g_vfs_gdocs_file_new_parent_from_gvfs
- * @gvfs_path: gvfs path of the #GVfsGdocsFile
+ * @gvfs_path: gvfs path of the #GVfsGDocsFile
  * @cancellable: a GCancellable or %NULL
  * @error: GError or %NULL
  *
- * Creates a new #GVfsGdocsFile to represent the parent directory of the 
- * #GVfsGdocsFile represented by @gvfs_path.
+ * Creates a new #GVfsGDocsFile to represent the parent directory of the 
+ * #GVfsGDocsFile represented by @gvfs_path.
  *
- * If it's the root directory the root directory, the new #GVfsGdocsFile 
- * will also reference the root.
+ * If it's the root directory, the new #GVfsGDocsFile will also reference the root.
  *
- * Returns: a new #GVfsGdocsFile representing the parent directory of @self, 
+ * Returns: a new #GVfsGDocsFile representing the parent directory of @self, 
  * if it's the root directory, GVfsGDocsFile::document-entry  will be %NULL
  * 
- * If the #GVfsGdocsFile doesn't exit, a G_IO_ERROR_NOT_FOUND is set.
+ * If the #GVfsGDocsFile doesn't exit, a G_IO_ERROR_NOT_FOUND is set.
  * 
  * If there was an error trying to get the feed, the server error is set.
  * 
@@ -317,16 +329,16 @@ g_vfs_gdocs_file_new_parent_from_gvfs (GVfsBackendGdocs     *backend,
                                        GError               **error)
 {
     GVfsGDocsFile    *parent_folder;
-    gchar            *parent_entry_id, *parent_entry_pseudo_path;
+    gchar            *parent_folder_id, *parent_entry_pseudo_path;
 
     g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
     g_return_val_if_fail (gvfs_path != NULL, NULL);
 
-    parent_entry_id = g_path_get_parent_basename (gvfs_path);
+    parent_folder_id = g_path_get_parent_basename (gvfs_path);
 
-    if (g_strcmp0 (parent_entry_id , "/") == 0)
+    if (g_strcmp0 (parent_folder_id , "/") == 0)
       {
-        g_free (parent_entry_id);
+        g_free (parent_folder_id);
         return g_object_new (G_VFS_TYPE_GDOCS_FILE,
                              "backend", backend,
                              "document-entry", NULL,
@@ -334,8 +346,8 @@ g_vfs_gdocs_file_new_parent_from_gvfs (GVfsBackendGdocs     *backend,
                              NULL);
       }
 
-    parent_entry_pseudo_path = g_strconcat ("/", parent_entry_id, NULL);
-    g_free (parent_entry_id);
+    parent_entry_pseudo_path = g_strconcat ("/", parent_folder_id, NULL);
+    g_free (parent_folder_id);
 
     parent_folder =  g_vfs_gdocs_file_new_folder_from_gvfs (backend,
                                                             parent_entry_pseudo_path,
@@ -348,9 +360,9 @@ g_vfs_gdocs_file_new_parent_from_gvfs (GVfsBackendGdocs     *backend,
 
 /**
  * g_vfs_gdata_file_is_root:
- * @self: the #GVfsGdocsFile to check
+ * @self: the #GVfsGDocsFile to check
  *
- * Checks if the given #GVfsGdocsFile references the root directory.
+ * Checks if the given #GVfsGDocsFile references the root directory.
  *
  * Returns: %TRUE if @self references the root directory
  **/
@@ -359,16 +371,18 @@ g_vfs_gdocs_file_is_root (const GVfsGDocsFile *self)
 {
   g_return_val_if_fail (G_VFS_IS_GDOCS_FILE (self), FALSE);
 
-  return self->priv->gvfs_path[0] == '/' && self->priv->gvfs_path[1] == 0;
+  return self->priv->gvfs_path[0] == '/' && self->priv->gvfs_path[1] == 0
+         && self->priv->document_entry == NULL; /* TODO check that  the entry 
+                                                 * check works fine */
 }
 
 /**
  * g_vfs_gdocs_file_get_document_entry:
- * @self: a #GVfsGdocsFile
+ * @self: a #GVfsGDocsFile
  *
- * Gets the GDataDocuments entry reprensenting the #GVfsGdocsFile on the google documents server.
+ * Gets the GDataDocuments entry reprensenting the #GVfsGDocsFile on the google documents server.
  *
- * Returns: the path to refer to @self on the GDOCS server.
+ * Returns: the entry to refer to @self on the GDOCS server.
  **/
 GDataDocumentsEntry *
 g_vfs_gdocs_file_get_document_entry (const GVfsGDocsFile *self)
@@ -380,7 +394,7 @@ g_vfs_gdocs_file_get_document_entry (const GVfsGDocsFile *self)
 
 /**
  * g_vfs_gdocs_file_get_gvfs_path:
- * @self: a #GVfsGdocsFile
+ * @self: a #GVfsGDocsFile
  *
  * Gets the GVfs path used to refer to @self.
  *
@@ -394,27 +408,42 @@ g_vfs_gdocs_file_get_gvfs_path (const GVfsGDocsFile *self)
   return self->priv->gvfs_path;
 }
 
+/**
+ * g_vfs_gdocs_file_get_info:
+ * @self: a #GVfsGDocsFile
+ * @info: a #GFileInfo where to set the file infos
+ * @matcher: a #GFileAttributeMatcher with the attribute to match
+ * @error: a #GError or %NULL
+ *
+ * Gets the file information of the GVfsGDocsFile file
+ *
+ * Returns: The #GFileInfo containing the file informations
+ **/
 GFileInfo *
 g_vfs_gdocs_file_get_info (GVfsGDocsFile            *self,
                            GFileInfo                *info,
                            GFileAttributeMatcher    *matcher,
                            GError                   **error)
 {
-    GTimeVal        t;
-    GIcon           *icon;
-    gchar           *content_type;
-    GString         *display_name;
-    const gchar     *file_name;
+    gchar                   *content_type, *display_name, *tmp_str;
+    const gchar             *file_name;
+
+    GDataDocumentsEntry     *document_entry;
 
     g_return_val_if_fail (G_VFS_IS_GDOCS_FILE (self), NULL);
+
+    document_entry =  self->priv->document_entry;
 
     if (!G_IS_FILE_INFO (info))
         info = g_file_info_new();
 
-    if (GDATA_IS_DOCUMENTS_ENTRY (self->priv->document_entry))
+    if (GDATA_IS_DOCUMENTS_ENTRY (document_entry))
       {
-        file_name = gdata_documents_entry_get_document_id (self->priv->document_entry);
+        GTimeVal t;
+        
+        file_name = gdata_documents_entry_get_document_id (document_entry);
         g_file_info_set_name (info, file_name);
+        gdata_entry_get_updated (document_entry, &t);
         g_file_info_set_modification_time (info, &t);
       }
     else if (!g_vfs_gdocs_file_is_root (self))
@@ -424,91 +453,54 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *self,
                      G_IO_ERROR_NOT_SUPPORTED,
                      _("%s not supported"),
                      self->priv->gvfs_path);
+        g_object_unref (info);
         return NULL;
       }
 
-    /* We set the content #GVfsGdocsFile type and #GVfsGdocsFile size if necessary*/
+    /* We set the content #GVfsGDocsFile type and #GVfsGDocsFile size if necessary*/
     if (g_vfs_gdocs_file_is_folder (self))
       {
         g_file_info_set_file_type (info, G_FILE_TYPE_DIRECTORY);
 
         content_type = g_strdup ("inode/directory");
-        if (g_strcmp0 (self->priv->gvfs_path, "/") == 0)
-            icon = g_themed_icon_new ("folder-remote");
-        else
-            icon = g_themed_icon_new ("folder");
       }
     else
       {
         g_file_info_set_file_type (info, G_FILE_TYPE_REGULAR);
 
-        /*Create the content type*/
-        if (GDATA_IS_DOCUMENTS_SPREADSHEET (self->priv->document_entry))
+        if (GDATA_IS_DOCUMENTS_SPREADSHEET (document_entry))
             content_type = g_strdup ("application/vnd.oasis.opendocument.spreadsheet");
-        else if (GDATA_IS_DOCUMENTS_TEXT (self->priv->document_entry))
+        else if (GDATA_IS_DOCUMENTS_TEXT (document_entry))
             content_type = g_strdup ("application/vnd.oasis.opendocument.text");
-        else if (GDATA_IS_DOCUMENTS_PRESENTATION (self->priv->document_entry))
+        else if (GDATA_IS_DOCUMENTS_PRESENTATION (document_entry))
             content_type = g_strdup ("application/vnd.ms-powerpoint");
         else
-            content_type = g_content_type_guess (display_name->str, NULL, 0, NULL);
-
+          {
+            g_set_error (error,
+                        G_IO_ERROR, 
+                        G_IO_ERROR_NOT_SUPPORTED,
+                        "Not a supported document type");
+            g_object_unref (info);
+            return NULL;
+          }
         /*We set the size as the maximum size we can upload on the server*/
-        g_file_info_set_size (info, 1000);
+        g_file_info_set_size (info, 1000); /*TODO check it*/
       }
 
     g_file_info_set_content_type (info, content_type);
 
-    if (g_vfs_gdocs_file_is_root (self))
-        return info;
-
-    /* Set the display name corresponding to the GDataEntry::title parameter */
-    display_name = g_string_new (gdata_entry_get_title (self->priv->document_entry));
-
-    /* We can't name a #GVfsGdocsFile with Slashes*/
-    convert_slashes (display_name->str);
-
-    /* Set hidden files */
-    if (*display_name->str == '.')
-        g_file_info_set_is_hidden (info, TRUE);
-
-    if (g_strstr_len (display_name->str,
-                      strlen (display_name),
-                      "\357\277\275")
-             != NULL)
-        g_string_append (display_name, " (invalid encoding)");
-    else
-      {
-        /*Set the extensions*/
-        if (GDATA_IS_DOCUMENTS_SPREADSHEET (self->priv->document_entry))
-          {
-            if (!g_str_has_suffix (display_name->str, ".ods"))
-                g_string_append (display_name, ".ods");
-          }
-        else if (GDATA_IS_DOCUMENTS_TEXT (self->priv->document_entry))
-          {
-            if (!g_str_has_suffix (display_name->str, ".odt"))
-                g_string_append (display_name, ".odt");
-          }
-        else if (GDATA_IS_DOCUMENTS_PRESENTATION (self->priv->document_entry))
-          {
-            if (!g_str_has_suffix (display_name->str, ".ppt"))
-                g_string_append (display_name, ".ppt");
-          }
-      }
-    g_file_info_set_display_name (info, display_name->str);
-
     if (g_file_attribute_matcher_matches (matcher,
                                           G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE)
             || g_file_attribute_matcher_matches (matcher,
-                                          G_FILE_ATTRIBUTE_STANDARD_ICON))
+                                                 G_FILE_ATTRIBUTE_STANDARD_ICON))
       {
-        icon = NULL;
+        GIcon *icon = NULL;
 
-        if (content_type)
-          {
+        if (g_vfs_gdocs_file_is_root (self))
+            icon = g_themed_icon_new ("folder-remote");
+        else
             icon = g_content_type_get_icon (content_type);
-            g_file_info_set_content_type (info, content_type);
-          }
+
         if (icon == NULL)
             icon = g_themed_icon_new ("text-x-generic");
 
@@ -517,15 +509,71 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *self,
       }
     g_free (content_type);
 
+    /* If the file is the root dir, we don't 
+     * have to set the etag and the display name
+     **/
+    if (g_vfs_gdocs_file_is_root (self))
+      return info;
+
+    /* Set the display name corresponding to the GDataEntry::title parameter */
+    tmp_str = display_name = g_strdup (gdata_entry_get_title (document_entry));
+
+    /* A display name can't contain '/' */
+    convert_slashes (display_name);
+
+    /* Set hidden files */
+    if (*display_name == '.')
+        g_file_info_set_is_hidden (info, TRUE);
+
+    if (g_strstr_len (display_name,
+                      strlen (display_name),
+                      "\357\277\275")
+                != NULL)
+      {
+        display_name = g_strconcat (tmp_str, " (invalid encoding)", NULL);
+        g_free (tmp_str);
+      }
+    else
+      {
+        /* Set the extensions */
+        if (GDATA_IS_DOCUMENTS_SPREADSHEET (document_entry))
+          {
+            if (!g_str_has_suffix (display_name, ".ods"))
+              {
+                display_name = g_strconcat (tmp_str, ".ods", NULL);
+                g_free (tmp_str);
+              }
+          }
+        else if (GDATA_IS_DOCUMENTS_TEXT (document_entry))
+          {
+            if (!g_str_has_suffix (display_name, ".odt"))
+              {
+                display_name = g_strconcat (tmp_str, ".odt",  NULL);
+                g_free (tmp_str);
+              }
+
+          }
+        else if (GDATA_IS_DOCUMENTS_PRESENTATION (document_entry))
+          {
+            if (!g_str_has_suffix (display_name, ".ppt"))
+              {  
+                display_name = g_strconcat (tmp_str, ".ppt", NULL);
+                g_free (tmp_str);
+              }
+          }
+
+        g_file_info_set_display_name (info, display_name);
+        g_free (display_name);
+      }
+
     if (g_file_attribute_matcher_matches (matcher,
                                           G_FILE_ATTRIBUTE_ETAG_VALUE))
       {
-        const gchar *etag = gdata_entry_get_etag (self->priv->document_entry);
+        const gchar *etag = gdata_entry_get_etag (document_entry);
         g_file_info_set_attribute_string (info,
                                           G_FILE_ATTRIBUTE_ETAG_VALUE,
                                           etag);
       }
-    g_string_free (display_name, TRUE);
 
     return info;
 }
@@ -534,10 +582,10 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *self,
  * @a: a #GVfsGDocsFile
  * @b: a #GVfsGDocsFile
  *
- * Compares @a and @b. If they reference the same #GVfsGdocsFile, %TRUE is returned.
+ * Compares @a and @b. If they reference the same #GVfsGDocsFile, %TRUE is returned.
  * This function uses #gconstpointer arguments to the #GEqualFunc type.
  *
- * Returns: %TRUE if @a and @b reference the same #GVfsGdocsFile.
+ * Returns: %TRUE if @a and @b reference the same #GVfsGDocsFile.
  **/
 gboolean
 g_vfs_gdocs_file_equal (const GVfsGDocsFile *a,
@@ -554,7 +602,7 @@ g_vfs_gdocs_file_equal (const GVfsGDocsFile *a,
 
 /**
  * g_vfs_gdocs_file_is_folder
- * @self: a #GVfsGDocsFile #GVfsGdocsFile
+ * @self: a #GVfsGDocsFile #GVfsGDocsFile
  *
  * Return %TRUE if @self is a folder otherwise %FALSE
  */
@@ -573,11 +621,11 @@ g_vfs_gdocs_file_is_folder (const GVfsGDocsFile *self)
 
 /* g_vfs_gdocs_file_get_download_uri
  *
- * @self: a GVfsGDocsFile #GVfsGdocsFile
+ * @self: a GVfsGDocsFile #GVfsGDocsFile
  * @cancellable: optional GCancellable object, or NULL
  * @error :    a GError, or NULL
  *
- * Return: the downloading URI of the #GVfsGdocsFile.
+ * Return: the downloading URI of the #GVfsGDocsFile.
  */
 gchar *
 g_vfs_gdocs_file_get_download_uri (GVfsGDocsFile    *self,
@@ -589,7 +637,7 @@ g_vfs_gdocs_file_get_download_uri (GVfsGDocsFile    *self,
 
     g_return_val_if_fail (G_VFS_IS_GDOCS_FILE (self), NULL);
 
-    entry = GDATA_DOCUMENTS_ENTRY (g_vfs_gdocs_file_get_document_entry (self));
+    entry = g_vfs_gdocs_file_get_document_entry (self);
 
     if (g_vfs_gdocs_file_is_folder (self))
       {
@@ -631,13 +679,13 @@ g_vfs_gdocs_file_get_download_uri (GVfsGDocsFile    *self,
 
 /* g_vfs_gdocs_file_download_file
  *
- * @self: a GVfsGDocsFile #GVfsGdocsFile
+ * @self: a GVfsGDocsFile #GVfsGDocsFile
  * @content_type: return location for the document's content type, or NULL;
  *                free with g_free()
  * @export_format: the format in which the presentation should be exported
- * @destination_directory :the directory into which the presentation #GVfsGdocsFile
+ * @destination_directory :the directory into which the presentation #GVfsGDocsFile
  *                          should be saved
- * @replace_if_exist : %TRUE if the #GVfsGdocsFile should be replaced if it already exists,
+ * @replace_if_exist : %TRUE if the #GVfsGDocsFile should be replaced if it already exists,
  *                           %FALSE otherwise
  * @download_folders: %TRUE if you want to download all the directory three,
  *                    otherwise %FALSE

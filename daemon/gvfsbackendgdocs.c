@@ -61,8 +61,8 @@ G_DEFINE_TYPE (GVfsBackendGdocs, g_vfs_backend_gdocs, G_VFS_TYPE_BACKEND)
 
 /*Private structure*/
 struct _GVfsBackendGdocsPrivate {
-    GDataDocumentsService	*service;
-    GHashTable				*entries;
+    GDataDocumentsService	*service; /* handles commmunication with the google server */
+    GHashTable				*entries; /* Rerence entries (documents) on the server */
 };
 
 static void
@@ -74,6 +74,7 @@ g_vfs_backend_gdocs_finalize (GObject *object)
     if (priv->service != NULL )
         g_object_unref (priv->service);
 
+    /* Look up to the parent class */
     G_OBJECT_CLASS (g_vfs_backend_gdocs_parent_class)->finalize (object);
 }
 
@@ -93,15 +94,28 @@ g_vfs_backend_gdocs_init (GVfsBackendGdocs *backend)
                                                     g_object_unref);
 }
 
-/* ************************************************************************* */
+/* ********************************************************************************** */
 /* public utility functions */
 
-GHashTable *
-g_vfs_backend_gdocs_get_entries (const GVfsBackendGdocs *backend)
+GVfsGDocsFile *
+g_vfs_backend_gdocs_look_up_file (const GVfsBackendGdocs *backend, const gchar *entry_id)
 {
+    GHashTable *entries = backend->priv->entries; 
+
     g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
-    
-    return backend->priv->entries;
+    g_return_val_if_fail (entry_id != NULL, NULL);
+
+    return g_hash_table_lookup (entries, entry_id);
+}
+
+gint
+g_vfs_backend_gdocs_count_files (const GVfsBackendGdocs *backend)
+{
+    GHashTable *entries = backend->priv->entries; 
+
+    g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), -1);
+
+    g_hash_table_size (entries);
 }
 
 GDataDocumentsService *
@@ -123,7 +137,6 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
     GVfsGDocsFile           *root_file;
 
     GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
-    GHashTable              *entries = g_vfs_backend_gdocs_get_entries (backend);
 
     /*Get all entries (as feed) on the server*/
     query = gdata_documents_query_new (NULL);
@@ -146,13 +159,14 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
     list_entries = gdata_feed_get_entries (GDATA_FEED (documents_feed));
     for (NULL; list_entries != NULL; list_entries = list_entries->next)
       {
-        GDataDocumentsEntry *document_entry = GDATA_DOCUMENTS_ENTRY (list_entries->data);
-        const gchar *entry_id = gdata_documents_entry_get_document_id (document_entry);
-        g_hash_table_insert (entries,
-                             entry_id,
-                             g_vfs_gdocs_file_new_from_document_entry (backend,
-                                                                       document_entry,
-                                                                       NULL));
+        GDataDocumentsEntry *document_entry;
+        GVfsGDocsFile       *file;
+
+        document_entry = GDATA_DOCUMENTS_ENTRY (list_entries->data);
+        file = g_vfs_gdocs_file_new_from_document_entry (backend,
+                                                         document_entry,
+                                                         NULL);
+        g_vfs_backend_gdocs_add_gdocs_file (backend, file); 
       }
     g_object_unref (documents_feed);
 
@@ -160,9 +174,54 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
     root_file = g_vfs_gdocs_file_new_from_document_entry (backend,
                                                           NULL,
                                                           NULL);
-    g_hash_table_insert (entries,
-                         "/",
-                         root_file);
+
+    g_vfs_backend_gdocs_add_gdocs_file (backend, root_file);
+}
+
+/* ********************************************************************************** */
+/* Private functions */
+void
+g_vfs_backend_gdocs_add_gdocs_file  (GVfsBackendGdocs   *backend,
+                                     GVfsGDocsFile      *file)
+{
+    const gchar *entry_id;
+    const GDataDocumentsEntry *entry;
+
+    GHashTable *entries = backend->priv->entries;
+    
+    g_return_if_fail (G_VFS_IS_GDOCS_FILE (file));
+
+    if (g_vfs_gdocs_file_is_root (file))
+        entry_id = "/";
+    else
+      { 
+        entry = g_vfs_gdocs_file_get_document_entry (file);
+        entry_id =  gdata_documents_entry_get_document_id (entry);
+      }
+
+    g_hash_table_insert (entries, entry_id, file);
+}
+
+void
+g_vfs_backend_gdocs_remove_gdocs_file  (GVfsBackendGdocs   *backend,
+                                        GVfsGDocsFile      *file)
+{
+    const gchar *entry_id;
+    const GDataDocumentsEntry *entry;
+
+    GHashTable *entries = backend->priv->entries;
+    
+    g_return_if_fail (G_VFS_IS_GDOCS_FILE (file));
+
+    if (g_vfs_gdocs_file_is_root (file))
+        entry_id = "/";
+    else
+      { 
+        entry = g_vfs_gdocs_file_get_document_entry (file);
+        entry_id =  gdata_documents_entry_get_document_id (entry);
+      }
+
+    g_hash_table_remove (entries, entry_id);
 }
 
 /* ********************************************************************************** */
@@ -260,14 +319,14 @@ do_mount (GVfsBackend   *backend,
           {
             if (aborted)
               g_vfs_job_failed (G_VFS_JOB (job),
-                          G_IO_ERROR,
-                          G_IO_ERROR_PERMISSION_DENIED,
-                          _("Password dialog cancelled"));
+                                G_IO_ERROR,
+                                G_IO_ERROR_PERMISSION_DENIED,
+                                _("Password dialog cancelled"));
             else
               g_vfs_job_failed (G_VFS_JOB (job),
-                          G_IO_ERROR,
-                          G_IO_ERROR_FAILED,
-                          _("Password access issue"));
+                                G_IO_ERROR,
+                                G_IO_ERROR_FAILED,
+                                _("Password access issue"));
             g_free (ask_user);
             g_free (ask_password);
             g_free (prompt);
@@ -300,7 +359,7 @@ do_mount (GVfsBackend   *backend,
         if (retval == TRUE)
           {
             /* Save the password, we use "gdata" as protocol  name since we could 
-             * use the same protocol later for other google services (as picasaweb)
+             * use the same protocol later for other google services (as picassaweb)
              * which would have the same password
              **/
             g_vfs_keyring_save_password (username,
@@ -621,7 +680,6 @@ do_enumerate (GVfsBackend           *backend,
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
     GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
-    GHashTable              *entries = g_vfs_backend_gdocs_get_entries (backend);
 
     /*Get documents properties*/
     query = gdata_documents_query_new (NULL);
@@ -687,9 +745,7 @@ do_enumerate (GVfsBackend           *backend,
               }
 
             /*We keep the GHashTable::entries up to date*/
-            g_hash_table_insert (entries,
-                                 entry_id,
-                                 file);                                 
+            g_vfs_backend_gdocs_add_gdocs_file (backend, file);
 
             info = g_vfs_gdocs_file_get_info (file, info, matcher, &error);
             if (error != NULL)
@@ -722,7 +778,8 @@ do_make_directory (GVfsBackend          *backend,
     GDataCategory           *folder_category;
     GDataDocumentsFolder    *folder;
     GDataDocumentsEntry     *entry, *tmp_entry, *new_folder;
-    GVfsGDocsFile           *destination_folder;
+    GVfsGDocsFile           *destination_folder, *file;
+    const gchar             *entry_id;
 
     GError                  *error = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
@@ -774,17 +831,31 @@ do_make_directory (GVfsBackend          *backend,
                                                           &error);
     g_object_unref (folder);
     g_object_unref (destination_folder);
-    if (new_folder != NULL)
-      g_object_unref (new_folder);
 
     if (error != NULL)
       {
         g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
         g_error_free (error);
+        if (new_folder != NULL)
+            g_object_unref (new_folder);
         return;
       }
 
-    g_error_free (error);
+    /* We keep the #GHashTable::entries property up to date */
+    file = g_vfs_gdocs_file_new_from_document_entry (backend, new_folder, error);
+    if (error != NULL)
+      {
+        g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+        g_error_free (error);
+        if (new_folder != NULL)
+            g_object_unref (new_folder);
+        return;
+      }
+    g_vfs_backend_gdocs_add_gdocs_file (backend, file);
+
+    if (new_folder != NULL)
+        g_object_unref (new_folder);
+
     g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
@@ -1027,7 +1098,6 @@ do_delete (GVfsBackend      *backend,
     GError                  *error = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
     GDataService            *service = g_vfs_backend_gdocs_get_service (backend);
-    GHashTable              *entries = g_vfs_backend_gdocs_get_entries (backend);
 
     file = g_vfs_gdocs_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend),
                                            filename,
@@ -1053,7 +1123,7 @@ do_delete (GVfsBackend      *backend,
 
     /* We keep the #GHashTable::entries property up to date*/
     entry_id = gdata_documents_entry_get_document_id (entry);
-    g_hash_table_remove (entries, entry_id);
+    g_vfs_backend_gdocs_remove_gdocs_file (backend, file);
 
     g_vfs_job_succeeded (G_VFS_JOB (job));
 }
@@ -1164,14 +1234,13 @@ do_push (GVfsBackend            *backend,
     const gchar             *entry_id;
     GDataDocumentsEntry     *entry, *new_entry;
     GFile                   *local_file;
-    GVfsGDocsFile           *destination_folder, new_file;
+    GVfsGDocsFile           *destination_folder, *file;
 
     GError                  *error = NULL;
     GDataDocumentsFolder    *folder_entry = NULL;
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
     GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
-    GHashTable              *entries = g_vfs_backend_gdocs_get_entries (backend);
 
     destination_folder = g_vfs_gdocs_file_new_parent_from_gvfs (gdocs_backend,
                                                                 destination,
@@ -1217,12 +1286,19 @@ do_push (GVfsBackend            *backend,
 
     /* We keep the #GHashTable::entries property up to date */
     entry_id = gdata_documents_entry_get_document_id (new_entry);
-    g_hash_table_insert (entries,
-                         entry_id,
-                         g_vfs_gdocs_file_new_from_document_entry (backend,
-                                                                   new_entry,
-                                                                   NULL));
+    file = g_vfs_gdocs_file_new_from_document_entry (backend, new_entry, error);
+    if (error != NULL)
+      {
+        g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+        g_error_free (error);
+        if (new_entry != NULL)
+            g_object_unref (new_entry);
+        return;
+      }
+    g_vfs_backend_gdocs_add_gdocs_file (backend, file);
+
     g_object_unref (entry);
+    g_object_unref (new_entry);
 
     g_vfs_job_succeeded (G_VFS_JOB (job));
 }
@@ -1271,7 +1347,6 @@ do_pull (GVfsBackend            *backend,
 
     if (error != NULL)
       {
-        g_debug ("error downloading");
         g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
         g_error_free (error);
         return;

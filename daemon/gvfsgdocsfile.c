@@ -147,7 +147,7 @@ g_vfs_gdocs_file_new_folder_from_gvfs (GVfsBackendGdocs *backend,
  * @backend: the gdocs backend this #GVfsGDocsFile is to be used on
  * @gvfs_path: gvfs path to create the file from
  * @cancellable: a GCancellable or %NULL
- * @error: a GError or %NULL
+ * @error: a #GError or %NULL
  *
  * Constructs a new #GVfsGDocsFile representing the given gvfs path.
  * If this is the root directory, the GVfsGDocsFile::gdocs-entry will be %NULL
@@ -170,7 +170,6 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
 
     gboolean                 entry_build = FALSE;
     GDataDocumentsService    *service = g_vfs_backend_gdocs_get_service (backend);
-    GHashTable               *entries = g_vfs_backend_gdocs_get_entries (backend);
 
     g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
     g_return_val_if_fail (gvfs_path != NULL, NULL);
@@ -180,7 +179,7 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
     /* if the GHashTable which makes the link between an entry-id and a type is empty,
      * we build it.
      **/
-    if (g_hash_table_size (entries) == 0)
+    if (g_vfs_backend_gdocs_count_files (backend) == 0)
       {
         g_vfs_backend_gdocs_rebuild_entries (backend, cancellable, error);
         if (*error != NULL)
@@ -191,7 +190,7 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
         entry_build = TRUE;
       }
 
-    self = g_hash_table_lookup (entries, entry_id);
+    self = g_vfs_backend_gdocs_look_up_file (backend, entry_id);
 
     /* If the entry hasn't been found, we rebuild the GHashTable*/
     if (self == NULL && entry_build == FALSE)
@@ -202,7 +201,7 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
             g_free (entry_id);
             return NULL;
           }
-        self = g_hash_table_lookup (entries, entry_id);
+        self = g_vfs_backend_gdocs_look_up_file (backend, entry_id);
       }
     g_free (entry_id);
 

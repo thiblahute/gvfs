@@ -24,7 +24,6 @@
 
 #include <glib.h>
 #include <glib-object.h>
-#include <gvfsbackendgdocs.h>
 
 G_BEGIN_DECLS
 
@@ -41,6 +40,8 @@ typedef struct{
     GObject                 parent;
     GVfsGDocsFilePrivate    *priv;
 }GVfsGDocsFile;
+
+#include <gvfsbackendgdocs.h>
 
 typedef struct {
     GObjectClass parent;

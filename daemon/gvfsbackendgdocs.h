@@ -59,11 +59,13 @@ struct _GVfsBackendGdocs
     GVfsBackendGdocsPrivate *priv;
 };
 
-GHashTable *g_vfs_backend_gdocs_get_entries (const GVfsBackendGdocs *backend);
+gint g_vfs_backend_gdocs_count_files (const GVfsBackendGdocs *backend);
 GDataDocumentsService *g_vfs_backend_gdocs_get_service (const GVfsBackendGdocs *backend);
 void g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs  *backend,
                                           GCancellable      *cancellable,
                                           GError            **error);
+#include "gvfsgdocsfile.h"
+GVfsGDocsFile *g_vfs_backend_gdocs_look_up_file (const GVfsBackendGdocs *backend, const gchar *entry_id);
 
 G_END_DECLS
 

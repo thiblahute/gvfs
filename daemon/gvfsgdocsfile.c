@@ -169,7 +169,6 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
     gchar                    *entry_id;
 
     gboolean                 entry_build = FALSE;
-    GDataDocumentsService    *service = g_vfs_backend_gdocs_get_service (backend);
 
     g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
     g_return_val_if_fail (gvfs_path != NULL, NULL);
@@ -238,7 +237,8 @@ g_vfs_gdocs_file_new_from_document_entry (GVfsBackendGdocs      *backend,
                                           GError                **error)
 {
     GVfsGDocsFile *self;
-    gchar *gvfs_path;
+
+    gchar *gvfs_path = NULL;
 
     g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
     g_return_val_if_fail (document_entry == NULL
@@ -442,7 +442,7 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *self,
         
         file_name = gdata_documents_entry_get_document_id (document_entry);
         g_file_info_set_name (info, file_name);
-        gdata_entry_get_updated (document_entry, &t);
+        gdata_entry_get_updated (GDATA_ENTRY (document_entry), &t);
         g_file_info_set_modification_time (info, &t);
       }
     else if (!g_vfs_gdocs_file_is_root (self))
@@ -515,7 +515,7 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *self,
       return info;
 
     /* Set the display name corresponding to the GDataEntry::title parameter */
-    tmp_str = display_name = g_strdup (gdata_entry_get_title (document_entry));
+    tmp_str = display_name = g_strdup (gdata_entry_get_title (GDATA_ENTRY (document_entry)));
 
     /* A display name can't contain '/' */
     convert_slashes (display_name);
@@ -568,7 +568,7 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *self,
     if (g_file_attribute_matcher_matches (matcher,
                                           G_FILE_ATTRIBUTE_ETAG_VALUE))
       {
-        const gchar *etag = gdata_entry_get_etag (document_entry);
+        const gchar *etag = gdata_entry_get_etag (GDATA_ENTRY (document_entry));
         g_file_info_set_attribute_string (info,
                                           G_FILE_ATTRIBUTE_ETAG_VALUE,
                                           etag);
@@ -725,7 +725,8 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *self,
           {
             GList *element = NULL;
             const gchar *folder_id = gdata_documents_entry_get_document_id (entry);
-            GDataDocumentsQuery *query;
+
+            GDataDocumentsQuery *query = NULL;
             gboolean is_root = g_vfs_gdocs_file_is_root (self);
 
             new_file = g_file_new_for_path (local_path);
@@ -758,16 +759,18 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *self,
                 return NULL;
               }
             element = gdata_feed_get_entries (GDATA_FEED (tmp_feed));
-            for (NULL; element != NULL; element = element->next)
+            for (element; element != NULL; element = element->next)
               {
-                const GDataDocumentsEntry *tmp_entry ;
                 const gchar *tmp_id;
+                GDataDocumentsEntry *tmp_entry;
+                gchar *new_destination_directory;
+
                 tmp_entry = GDATA_DOCUMENTS_ENTRY (element->data);
                 tmp_id = gdata_documents_entry_get_document_id (tmp_entry);
 
-                gchar *new_destination_directory = g_strconcat (local_path,
-                                                                tmp_id,
-                                                                NULL);
+                new_destination_directory = g_strconcat (local_path,
+                                                         tmp_id,
+                                                         NULL);
                 /* If it's the root directory,
                  * we check that the document is not contained in another folder
                  **/
@@ -808,7 +811,7 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *self,
       }
     else if (GDATA_IS_DOCUMENTS_SPREADSHEET (entry))
       {
-        const GDataDocumentsSpreadsheet *tmp_entry;
+        GDataDocumentsSpreadsheet *tmp_entry;
         GDataDocumentsSpreadsheetFormat ods_format;
 
         ods_format = GDATA_DOCUMENTS_SPREADSHEET_ODS;
@@ -827,7 +830,7 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *self,
       }
     else if (GDATA_IS_DOCUMENTS_TEXT (entry))
       {
-        const GDataDocumentsText *tmp_entry;
+        GDataDocumentsText *tmp_entry;
         GDataDocumentsTextFormat odt_format;;
 
         tmp_entry =  GDATA_DOCUMENTS_TEXT (entry);
@@ -845,7 +848,7 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *self,
       }
     else if (GDATA_IS_DOCUMENTS_PRESENTATION (entry))
       {
-        const GDataDocumentsPresentation *tmp_entry;
+        GDataDocumentsPresentation *tmp_entry;
         GDataDocumentsPresentationFormat ppt_format;
 
         tmp_entry = GDATA_DOCUMENTS_PRESENTATION (entry);
@@ -892,6 +895,9 @@ g_vfs_gdocs_file_get_property (GObject      *object,
         case PROP_DOCUMENT_ENTRY:
             g_value_set_object (value, priv->document_entry);
             break;
+        default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+            break;
       }
 }
 
@@ -912,6 +918,9 @@ g_vfs_gdocs_file_set_property (GObject      *object,
             break;
         case PROP_DOCUMENT_ENTRY:
             priv->document_entry = g_value_dup_object (value);
+            break;
+        default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
             break;
       }
 }

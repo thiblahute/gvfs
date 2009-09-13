@@ -139,7 +139,7 @@ g_vfs_backend_gdocs_count_files (const GVfsBackendGdocs *backend)
 
     g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), -1);
 
-    g_hash_table_size (entries);
+    return g_hash_table_size (entries);
 }
 
 GDataDocumentsService *
@@ -665,7 +665,7 @@ do_enumerate (GVfsBackend           *backend,
     /*Get documents properties*/
     query = gdata_documents_query_new (NULL);
     folder_id = g_path_get_basename (dirname);
-    if (strcmp (dirname, "/") != 0)
+    if (g_strcmp0 (dirname, "/") != 0)
       {
         /*Sets the query folder id*/
         gdata_documents_query_set_folder_id (query, folder_id);
@@ -1056,7 +1056,7 @@ try_close_write (GVfsBackend         *backend,
     g_output_stream_close_async (stream,
                                  G_PRIORITY_DEFAULT,
                                  G_VFS_JOB (job)->cancellable,
-                                 close_read_ready,
+                                 close_write_ready,
                                  job);
     return TRUE;
 }

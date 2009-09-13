@@ -758,8 +758,9 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *self,
                     g_object_unref (tmp_feed);
                 return NULL;
               }
-            element = gdata_feed_get_entries (GDATA_FEED (tmp_feed));
-            for (element; element != NULL; element = element->next)
+            for (element = gdata_feed_get_entries (GDATA_FEED (tmp_feed));
+                 element != NULL; 
+                 element = element->next)
               {
                 const gchar *tmp_id;
                 GDataDocumentsEntry *tmp_entry;

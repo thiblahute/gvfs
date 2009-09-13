@@ -3002,7 +3002,10 @@ update_mountinfo (void)
   contents = read_contents (mountinfo_fd);
   lseek (mountinfo_fd, SEEK_SET, 0);
   if (contents)
-    mountinfo_roots = parse_mountinfo (contents);
+    {
+      mountinfo_roots = parse_mountinfo (contents);
+      g_free (contents);
+    }
 }
 
 static char *
@@ -3087,7 +3090,8 @@ find_mountpoint_for (MetaLookupCache *cache,
   last = g_strdup (file);
   while (1)
     {
-      dir_dev = get_devnum (dir);
+      if (dir)
+	dir_dev = get_devnum (dir);
       if (dir == NULL ||
 	  dev != dir_dev)
 	{
@@ -3168,6 +3172,7 @@ meta_lookup_cache_free (MetaLookupCache *cache)
   g_free (cache->last_parent_expanded);
   g_free (cache->last_parent_mountpoint);
   g_free (cache->last_parent_mountpoint_extra_prefix);
+  g_free (cache->last_device_tree);
   g_free (cache);
 }
 
@@ -3219,6 +3224,7 @@ expand_parents (MetaLookupCache *cache,
       strcmp (cache->last_parent, parent) != 0)
     {
       g_free (cache->last_parent);
+      g_free (cache->last_parent_expanded);
       cache->last_parent = parent;
       cache->last_parent_expanded = expand_all_symlinks (parent, &parent_dev);
       cache->last_parent_dev = parent_dev;
@@ -3232,6 +3238,7 @@ expand_parents (MetaLookupCache *cache,
 
   *parent_dev_out = cache->last_parent_dev;
   basename = g_path_get_basename (path_copy);
+  g_free (path_copy);
   res = g_build_filename (cache->last_parent_expanded, basename, NULL);
   g_free (basename);
 
@@ -3312,6 +3319,7 @@ meta_lookup_cache_lookup_path (MetaLookupCache *cache,
     }
 
  found:
+  g_free (expanded);
   tree = meta_tree_lookup_by_name (treename, for_write);
   if (tree)
     {

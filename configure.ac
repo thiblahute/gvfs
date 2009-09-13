@@ -1,6 +1,6 @@
 AC_INIT(client/gdaemonvfs.h)
 
-AM_INIT_AUTOMAKE(gvfs, 1.3.6)
+AM_INIT_AUTOMAKE(gvfs, 1.3.7)
 AM_CONFIG_HEADER(config.h)
 
 AM_SANITY_CHECK
@@ -258,7 +258,7 @@ AC_ARG_ENABLE(gdu, [  --disable-gdu           build without GDU volume monitor])
 msg_gdu=no
 GDU_LIBS=
 GDU_CFLAGS=
-GDU_REQUIRED=0.4
+GDU_REQUIRED=0.5
 
 if test "x$enable_gdu" != "xno"; then
   PKG_CHECK_EXISTS([gdu >= $GDU_REQUIRED], msg_gdu=yes)

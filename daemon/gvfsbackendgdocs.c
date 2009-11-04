@@ -104,10 +104,10 @@ g_vfs_backend_gdocs_remove_gdocs_file  (GVfsBackendGdocs   *backend,
     const gchar *entry_id;
     GDataDocumentsEntry *entry;
 
-    GHashTable *entries = backend->priv->entries;
-    
     g_return_if_fail (G_VFS_IS_GDOCS_FILE (file));
 
+    GHashTable *entries = backend->priv->entries;
+    
     if (g_vfs_gdocs_file_is_root (file))
         entry_id = "/";
     else
@@ -234,7 +234,7 @@ do_mount (GVfsBackend   *backend,
     /* We want an uri like gdocs://a_username to work
      * We don't care about gdocs://host since it should never be used
      * The host is actually the part after the '@' of the user's email address
-     * The default host is gmail.com since it's the most used by google documents
+     * The default host is gmail.com since it's almost the only used
      **/
     if (host == NULL)
         host = "gmail.com";
@@ -329,8 +329,8 @@ do_mount (GVfsBackend   *backend,
               full_username = g_strdup_printf ("%s@%s", ask_user, host);
           }
 
-        g_debug ("-> Username: %s\n", full_username);
-        g_debug ("password: ***\n");
+        g_message ("-> Username: %s\n", full_username);
+        g_message ("password: ***\n");
         
         retval = gdata_service_authenticate (GDATA_SERVICE (service),
                                              full_username,
@@ -384,7 +384,7 @@ do_mount (GVfsBackend   *backend,
     g_free (ask_user);
 
     g_vfs_job_succeeded (G_VFS_JOB (job));
-    g_debug ("===Connected\n");
+    g_message ("===Connected\n");
 }
 
 static void
@@ -446,7 +446,7 @@ do_move (GVfsBackend            *backend,
                 && g_strcmp0 (source_parent_id, "/") != 0)
       move_to_root = TRUE;
 
-    g_debug ("Source id: %s, destination ID: %s", source_id, destination_id);
+    g_message ("Source id: %s, destination ID: %s", source_id, destination_id);
 
     /* We check if we need to rename, if we need, the destination folder should be
      * the parent one */
@@ -499,7 +499,7 @@ do_move (GVfsBackend            *backend,
         tmp_entry = g_vfs_gdocs_file_get_document_entry (destination_folder);
         folder_entry = GDATA_DOCUMENTS_FOLDER (tmp_entry);
 
-        g_debug ("destination_folder: %s",
+        g_message ("destination_folder: %s",
                  gdata_documents_entry_get_document_id (entry));
         new_entry = gdata_documents_service_move_document_to_folder (service,
                                                                      entry,
@@ -522,7 +522,7 @@ do_move (GVfsBackend            *backend,
     if (move_to_root)
       {
         GDataDocumentsEntry *tmp_entry;
-        g_debug ("Is moving to root");
+        g_message ("Is moving to root");
         /* we need to check for the error that could have
          * happend building the destination_folder*/
         containing_folder = g_vfs_gdocs_file_new_parent_from_gvfs (gdocs_backend,
@@ -540,7 +540,7 @@ do_move (GVfsBackend            *backend,
         tmp_entry = g_vfs_gdocs_file_get_document_entry (containing_folder);
         folder_entry = GDATA_DOCUMENTS_FOLDER (tmp_entry);
                     
-        g_debug ("Moving %s out of %s",
+        g_message ("Moving %s out of %s",
                     gdata_documents_entry_get_document_id (entry),
                     gdata_documents_entry_get_document_id (tmp_entry));
 
@@ -561,7 +561,7 @@ do_move (GVfsBackend            *backend,
       {
         gchar *new_filename = g_path_get_basename (destination);
 
-        g_debug ("Renaming file: %s", new_filename);
+        g_message ("Renaming file: %s", new_filename);
         if (new_entry == NULL)
           new_entry = g_vfs_gdocs_file_get_document_entry (source_file);
 
@@ -670,7 +670,7 @@ do_enumerate (GVfsBackend           *backend,
         /*Sets the query folder id*/
         gdata_documents_query_set_folder_id (query, folder_id);
         in_folder = TRUE;
-        g_debug ("Folder ID: %s\n", folder_id);
+        g_message ("Folder ID: %s\n", folder_id);
       }
 
     gdata_documents_query_set_show_folders (query, TRUE);
@@ -704,7 +704,7 @@ do_enumerate (GVfsBackend           *backend,
         path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (list_entries->data));
         parent_id = g_path_get_parent_basename (path);
 
-        //g_debug ("Path: %s folder ID %s, parent_id: %s", folder_id, parent_id);
+        //g_message ("Path: %s folder ID %s, parent_id: %s", folder_id, parent_id);
         /*We check that the file is in the selected folder (not in a child of it)*/
         if (g_strcmp0 (folder_id, parent_id) == 0 || in_folder)
           {
@@ -854,7 +854,7 @@ do_open_for_read (GVfsBackend           *backend,
     GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (gdocs_backend);
 
-    g_debug ("OPEN READ: %s\n", filename);
+    g_message ("OPEN READ: %s\n", filename);
 
     file = g_vfs_gdocs_file_new_from_gvfs (gdocs_backend,
                                            filename,
@@ -901,6 +901,8 @@ read_ready (GObject      *source_object,
 
     nread = g_input_stream_read_finish (stream, result, &error);
 
+    g_print ("read ready: %d\n", nread);
+
     if (error != NULL)
       {
         g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
@@ -921,6 +923,8 @@ try_read (GVfsBackend       *backend,
 {
     GInputStream        *stream = G_INPUT_STREAM (handle);
     GCancellable        *cancellable = G_VFS_JOB (job)->cancellable;
+
+    g_message ("TRY READ");
 
     g_input_stream_read_async (stream,
                                buffer,
@@ -1097,7 +1101,7 @@ do_delete (GVfsBackend      *backend,
         return;
       }
 
-    g_debug ("%s :deleted\n", gdata_entry_get_title (GDATA_ENTRY (entry)));
+    g_message ("%s :deleted\n", gdata_entry_get_title (GDATA_ENTRY (entry)));
 
     /* We keep the #GHashTable::entries property up to date*/
     g_vfs_backend_gdocs_remove_gdocs_file (gdocs_backend, file);
@@ -1245,7 +1249,7 @@ do_push (GVfsBackend *backend,
     gdata_entry_set_title (GDATA_ENTRY (entry), destination_filename);
     g_free (destination_filename);
 
-    g_debug ("Destination name:local path %s", local_path);
+    g_message ("Destination name:local path %s", local_path);
     local_file = g_file_new_for_path (local_path);
     new_entry = gdata_documents_service_upload_document (service,
                                                          NULL,

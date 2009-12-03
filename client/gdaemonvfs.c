@@ -648,6 +648,7 @@ fill_mountable_info (GDaemonVfs *vfs)
 
   infos = g_ptr_array_new ();
   uri_schemes = g_ptr_array_new ();
+  g_ptr_array_add (uri_schemes, g_strdup ("file"));
   count = 0;
   do
     {
@@ -1239,7 +1240,7 @@ _g_daemon_vfs_append_metadata_for_set (DBusMessage *message,
   res = 0;
   if (type == G_FILE_ATTRIBUTE_TYPE_STRING)
     {
-      const char *current;
+      char *current;
       const char *val = (char *)value;
 
       current = meta_tree_lookup_string (tree, path, key);
@@ -1266,6 +1267,7 @@ _g_daemon_vfs_append_metadata_for_set (DBusMessage *message,
 				       DBUS_TYPE_ARRAY, DBUS_TYPE_STRING, &val, g_strv_length (val),
 				       0);
 	}
+      g_strfreev (current);
     }
   else if (type == G_FILE_ATTRIBUTE_TYPE_INVALID)
     {

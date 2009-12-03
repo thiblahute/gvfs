@@ -188,9 +188,11 @@ update_drive (GGduDrive *drive)
        *
        * See also below where we e.g. set can_eject to TRUE for non-removable drives.
        */
-      drive->can_eject = gdu_device_drive_get_is_media_ejectable (device) || gdu_device_drive_get_requires_eject (device) || gdu_device_is_removable (device);
+      drive->can_eject = ((gdu_device_drive_get_is_media_ejectable (device) || gdu_device_is_removable (device)) &&
+                          gdu_device_is_media_available (device) && ! _is_pc_floppy_drive (device)) ||
+                         gdu_device_drive_get_requires_eject (device);
       drive->is_media_check_automatic = gdu_device_is_media_change_detected (device);
-      drive->can_poll_for_media = TRUE;
+      drive->can_poll_for_media = gdu_device_is_removable (device);
     }
 
   /* determine start/stop type */
@@ -212,39 +214,31 @@ update_drive (GGduDrive *drive)
     }
   else if (device != NULL && gdu_device_drive_get_can_detach (device))
     {
-      /* If the device is not ejectable, just detach on Eject() and claim to be ejectable.
+      /* Ideally, for non-ejectable devices (e.g. non-cdrom, non-zip)
+       * such as USB sticks we'd display "Eject" instead of "Shutdown"
+       * since it is more familiar and the common case. The way this
+       * should work is that after the Eject() method returns we call
+       * Detach() - see eject_cb() below.
        *
-       * This is so we get the UI to display "Eject" instead of "Shutdown" since it is
-       * more familiar and the common case. The way this works is that after the Eject()
-       * method returns we call Detach() - see eject_cb() below.
+       * (Note that it's not enough to just call Detach() since some
+       * devices, such as the Kindle, only works with Eject(). So we
+       * call them both in order).
        *
-       * (Note that it's not enough to just call Detach() since some devices, such as
-       * the Kindle, only works with Eject(). So we call them both in order)
+       * We actually used to do this (and that's why eject_cb() still
+       * has this code) but some systems use internal USB devices for
+       * e.g. SD card readers. If we were to detach these then the
+       * user would have to power-cycle the system to get the device
+       * back. See http://bugs.freedesktop.org/show_bug.cgi?id=24343
+       * for more details.
+       *
+       * In the future, if we know for sure that a port is external
+       * (like, from DMI data) we can go back to doing this. For now
+       * the user will get all the options...
        */
-      if (!gdu_device_drive_get_is_media_ejectable (device))
-        {
-          drive->can_eject = TRUE;
-          /* we still set this since
-           *
-           * a) it helps when debugging things using gvfs-mount(1) output
-           *    since the tool will print can_stop=0 but start_stop_type=shutdown
-           *
-           * b) we use it in eject_cb() to determine we need to call Detach()
-           *    after Eject() successfully completes
-           */
-          drive->start_stop_type = G_DRIVE_START_STOP_TYPE_SHUTDOWN;
-        }
-      else
-        {
-          /* So here the device is ejectable and detachable - for example, a USB CD-ROM
-           * drive or a CD-ROM drive in an Ultrabay - for these, we want to offer both
-           * "Eject" and "Shutdown" options in the UI
-           */
-          drive->can_stop = TRUE;
-          drive->can_start = FALSE;
-          drive->can_start_degraded = FALSE;
-          drive->start_stop_type = G_DRIVE_START_STOP_TYPE_SHUTDOWN;
-        }
+      drive->can_stop = TRUE;
+      drive->can_start = FALSE;
+      drive->can_start_degraded = FALSE;
+      drive->start_stop_type = G_DRIVE_START_STOP_TYPE_SHUTDOWN;
     }
 
   if (device != NULL)
@@ -647,6 +641,18 @@ eject_cb (GduDevice *device,
 {
   GSimpleAsyncResult *simple = G_SIMPLE_ASYNC_RESULT (user_data);
   GGduDrive *drive;
+  gboolean drive_detachable;
+
+  drive = G_GDU_DRIVE (g_async_result_get_source_object (G_ASYNC_RESULT (simple)));
+  drive_detachable = drive->can_stop == FALSE && drive->start_stop_type == G_DRIVE_START_STOP_TYPE_SHUTDOWN;
+
+  if (error != NULL && error->code == G_IO_ERROR_FAILED &&
+      drive_detachable && ! drive->has_media && drive->is_media_removable)
+    {
+      /* Silently drop the error if there's no media in drive and we're still trying to detach it (see below) */
+      g_error_free (error);
+      error = NULL;
+    }
 
   if (error != NULL)
     {
@@ -657,8 +663,7 @@ eject_cb (GduDevice *device,
       goto out;
     }
 
-  drive = G_GDU_DRIVE (g_async_result_get_source_object (G_ASYNC_RESULT (simple)));
-  if (drive->can_stop == FALSE && drive->start_stop_type == G_DRIVE_START_STOP_TYPE_SHUTDOWN)
+  if (drive_detachable)
     {
       /* If device is not ejectable but it is detachable and we don't support stop(),
        * then also run Detach() after Eject() - see update_drive() for details for why...

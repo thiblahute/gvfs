@@ -1,6 +1,6 @@
 AC_INIT(client/gdaemonvfs.h)
 
-AM_INIT_AUTOMAKE(gvfs, 1.3.7)
+AM_INIT_AUTOMAKE(gvfs, 1.5.2)
 AM_CONFIG_HEADER(config.h)
 
 AM_SANITY_CHECK
@@ -16,12 +16,9 @@ AM_DISABLE_STATIC
 AM_PROG_LIBTOOL
 AC_PATH_PROG(PKG_CONFIG, pkg-config, no)
 AM_PROG_CC_C_O
+AC_PROG_SED
 
-
-# Make libtool use --silent when --silent is passed to make
-changequote(,)dnl
-LIBTOOL="${LIBTOOL} \$(shell echo \"\$(MFLAGS)\" | awk '/^[^ ]*s/ { print \"--silent\" }')"
-changequote([,])dnl
+m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
 
 AC_TYPE_PID_T
 AC_TYPE_SIGNAL
@@ -46,12 +43,8 @@ DISTCHECK_CONFIGURE_FLAGS="--enable-gtk-doc"
 AC_SUBST(DISTCHECK_CONFIGURE_FLAGS)
 
 PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.21.2 gthread-2.0 gobject-2.0 gmodule-no-export-2.0 gio-unix-2.0 gio-2.0 )
-AC_SUBST(GLIB_CFLAGS)
-AC_SUBST(GLIB_LIBS)
 
 PKG_CHECK_MODULES(DBUS, dbus-1)
-AC_SUBST(DBUS_CFLAGS)
-AC_SUBST(DBUS_LIBS)
 
 AC_ARG_WITH(dbus_service_dir, [  --with-dbus-service-dir=PATH choose directory for dbus service files, [default=PREFIX/share/dbus-1/services]], with_dbus_service_dir="$withval", with_dbus_service_dir=$datadir/dbus-1/services)
 DBUS_SERVICE_DIR=$with_dbus_service_dir
@@ -124,7 +117,7 @@ HTTP_CFLAGS=
 HTTP_LIBS=
 
 if test "x$enable_http" != "xno"; then
-  PKG_CHECK_EXISTS(libsoup-gnome-2.4 >= 2.25.1, msg_http=yes)
+  PKG_CHECK_EXISTS(libsoup-gnome-2.4 >= 2.26.0, msg_http=yes)
 
   if test "x$msg_http" = "xyes"; then
     PKG_CHECK_MODULES(HTTP, libsoup-gnome-2.4 libxml-2.0)
@@ -183,8 +176,6 @@ PKG_CHECK_MODULES(LIBXML, libxml-2.0,
 	AC_DEFINE(HAVE_LIBXML, [], [Set if we have libxml])]
 	msg_libxml=yes,
         [AM_CONDITIONAL(HAVE_LIBXML, false)])
-AC_SUBST(LIBXML_CFLAGS)
-AC_SUBST(LIBXML_LIBS)
 
 dnl *************************
 dnl *** Check for libudev ***
@@ -203,9 +194,6 @@ if test "x$enable_udev" != "xno"; then
   fi
 fi
 
-AC_SUBST(UDEV_CFLAGS)
-AC_SUBST(UDEV_LIBS)
-
 dnl **********************
 dnl *** Check for FUSE ***
 dnl **********************
@@ -222,9 +210,6 @@ if test "x$enable_fuse" != "xno"; then
     AC_DEFINE(HAVE_FUSE, 1, [Define to 1 if FUSE is available])
   fi
 fi
-
-AC_SUBST(FUSE_LIBS)
-AC_SUBST(FUSE_CFLAGS)
 
 AM_CONDITIONAL(USE_FUSE, [test "$msg_fuse" = "yes"])
 
@@ -245,10 +230,23 @@ if test "x$enable_gconf" != "xno"; then
   fi
 fi
 
-AC_SUBST(GCONF_LIBS)
-AC_SUBST(GCONF_CFLAGS)
-
 AM_CONDITIONAL(USE_GCONF, [test "$msg_gconf" = "yes"])
+
+dnl ********************************************
+dnl *** Check for expat (for obexftp and gdu ***
+dnl ********************************************
+
+dnl Make sure we have expat
+AC_CHECK_LIB(expat, XML_ParserCreate_MM,
+             [ AC_CHECK_HEADERS(expat.h, have_expat=true, have_expat=false) ],
+             have_expat=false)
+if test "x$have_expat" = "xtrue"; then
+  EXPAT_CFLAGS=""
+  EXPAT_LIBS="-lexpat"
+  AC_DEFINE(HAVE_EXPAT,, [Define to 1 if you have expat available])
+fi
+AC_SUBST(EXPAT_CFLAGS)
+AC_SUBST(EXPAT_LIBS)
 
 dnl ************************************
 dnl *** Check for gnome-disk-utility ***
@@ -258,7 +256,7 @@ AC_ARG_ENABLE(gdu, [  --disable-gdu           build without GDU volume monitor])
 msg_gdu=no
 GDU_LIBS=
 GDU_CFLAGS=
-GDU_REQUIRED=0.5
+GDU_REQUIRED=2.28.0
 
 if test "x$enable_gdu" != "xno"; then
   PKG_CHECK_EXISTS([gdu >= $GDU_REQUIRED], msg_gdu=yes)
@@ -268,9 +266,6 @@ if test "x$enable_gdu" != "xno"; then
     AC_DEFINE(HAVE_GDU, 1, [Define to 1 if gnome-disk-utility is available])
   fi
 fi
-
-AC_SUBST(GDU_LIBS)
-AC_SUBST(GDU_CFLAGS)
 
 AM_CONDITIONAL(USE_GDU, [test "$msg_gdu" = "yes"])
 
@@ -300,9 +295,6 @@ if test "x$enable_hal" != "xno"; then
   fi
 fi
 
-AC_SUBST(HAL_LIBS)
-AC_SUBST(HAL_CFLAGS)
-
 AM_CONDITIONAL(USE_HAL, [test "$msg_hal" = "yes"])
 
 dnl **********************
@@ -320,8 +312,6 @@ if test "x$enable_gudev" != "xno"; then
     AC_DEFINE(HAVE_GUDEV, 1, [Define to 1 if gudev is available])
   fi
 fi
-AC_SUBST(GUDEV_CFLAGS)
-AC_SUBST(GUDEV_LIBS)
 AM_CONDITIONAL(USE_GUDEV, [test "$msg_gudev" = "yes"])
 
 dnl **************************************************
@@ -341,10 +331,29 @@ if test "x$enable_cdda" != "xno" -a \( "x$msg_hal" = "xyes" -o "x$msg_gudev" = "
   fi
 fi
 
-AC_SUBST(CDDA_LIBS)
-AC_SUBST(CDDA_CFLAGS)
-
 AM_CONDITIONAL(USE_CDDA, [test "$msg_cdda" = "yes"])
+
+dnl *************************************************
+dnl *** Check if we should build with AFC backend ***
+dnl *************************************************
+AC_ARG_ENABLE(afc, [  --disable-afc           build without AFC backend])
+msg_afc=no
+AFC_LIBS=
+AFC_CFLAGS=
+
+if test "x$enable_afc" != "xno" ; then
+  PKG_CHECK_EXISTS(libiphone-1.0 >= 0.9.4, msg_afc=yes)
+
+  if test "x$msg_afc" = "xyes"; then
+    PKG_CHECK_MODULES(AFC, libiphone-1.0)
+    AC_DEFINE(HAVE_AFC, 1, [Define to 1 if AFC is going to be built])
+  fi
+fi
+
+AC_SUBST(AFC_LIBS)
+AC_SUBST(AFC_CFLAGS)
+
+AM_CONDITIONAL(USE_AFC, [test "$msg_afc" = "yes"])
 
 dnl *****************************************************
 dnl *** Check if we should build with obexftp backend ***
@@ -357,11 +366,6 @@ OBEXFTP_CFLAGS=
 if test "x$enable_obexftp" != "xno";  then
   PKG_CHECK_EXISTS(dbus-glib-1 bluez >= 4.0, msg_obexftp=yes)
 
-  dnl Make sure we have expat
-  AC_CHECK_LIB(expat, XML_ParserCreate_MM,
-               [ AC_CHECK_HEADERS(expat.h, have_expat=true, have_expat=false) ],
-               have_expat=false)
-
   if test "x$msg_obexftp" = "xyes" -a "x$have_expat" = "xtrue"; then
     PKG_CHECK_MODULES(OBEXFTP, dbus-glib-1 bluez >= 4.0)
     AC_SUBST(OBEXFTP_LIBS)
@@ -369,15 +373,10 @@ if test "x$enable_obexftp" != "xno";  then
 
     msg_obexftp=yes
     AC_DEFINE(HAVE_OBEXFTP, 1, [Define to 1 if ObexFTP is going to be built])
-    XML_CFLAGS=""
-    XML_LIBS="-lexpat"
   else
     msg_obexftp=no
   fi
 fi
-
-AC_SUBST(XML_LIBS)
-AC_SUBST(XML_CFLAGS)
 
 AM_CONDITIONAL(USE_OBEXFTP, [test "$msg_obexftp" = "yes"])
 
@@ -394,7 +393,7 @@ if test "x$enable_gphoto2" != "xno" -a \( "x$msg_hal" = "xyes" -o "x$msg_gudev" 
 
   # Need OS tweaks in hal volume monitor backend
   case "$host" in
-    *-linux*)
+    *-linux* | *-freebsd* | *-kfreebsd*-gnu)
       use_gphoto2=yes
       ;;
     *)
@@ -412,9 +411,6 @@ if test "x$enable_gphoto2" != "xno" -a \( "x$msg_hal" = "xyes" -o "x$msg_gudev" 
     fi
   fi
 fi
-
-AC_SUBST(GPHOTO2_LIBS)
-AC_SUBST(GPHOTO2_CFLAGS)
 
 AM_CONDITIONAL(USE_GPHOTO2, [test "$msg_gphoto2" = "yes"])
 
@@ -434,9 +430,6 @@ if test "x$enable_keyring" != "xno"; then
     AC_DEFINE(HAVE_KEYRING, 1, [Define to 1 if GNOME Keyring is available])
   fi
 fi
-
-AC_SUBST(KEYRING_LIBS)
-AC_SUBST(KEYRING_CFLAGS)
 
 AM_CONDITIONAL(USE_KEYRING, [test "$msg_keyring" = "yes"])
 
@@ -492,6 +485,8 @@ if test "x$enable_samba" != "xno"; then
                 else
                 	SAMBA_LIBS="-lsmbclient"
                 fi
+                AC_CHECK_LIB(smbclient, smbc_getFunctionStatVFS, 
+                        AC_DEFINE(HAVE_SAMBA_STAT_VFS, , [Define to 1 if smbclient supports smbc_stat_fn]))
 	else
 		AC_CHECK_LIB(smbclient, smbc_new_context,samba_old_libs="yes", samba_old_libs="no")
 		if test "x${samba_old_libs}" != "xno"; then
@@ -686,7 +681,7 @@ if test "$GCC" = "yes" -a "$set_more_warnings" != "no"; then
 	-Wcast-align -Wsign-compare \
 	$CFLAGS"
 
-	for option in -Wno-strict-aliasing -Wno-sign-compare; do
+	for option in -Wno-strict-aliasing -Wno-sign-compare -Wtype-limits; do
 		SAVE_CFLAGS="$CFLAGS"
 		CFLAGS="$CFLAGS $option"
 		AC_MSG_CHECKING([whether gcc understands $option])
@@ -717,6 +712,7 @@ monitor/proxy/Makefile
 monitor/hal/Makefile
 monitor/gdu/Makefile
 monitor/gphoto2/Makefile
+monitor/afc/Makefile
 gconf/Makefile
 programs/Makefile
 test/Makefile
@@ -735,7 +731,8 @@ echo "
 	FUSE support:                 $msg_fuse
         CDDA support:                 $msg_cdda
         Gphoto2 support:              $msg_gphoto2
-	archive support:	      $msg_archive
+	archive support:              $msg_archive
+	AFC support:                  $msg_afc
         GConf support:                $msg_gconf
         DNS-SD support:               $msg_avahi
 	Build HAL volume monitor:     $msg_hal (with fast init path: $have_hal_fast_init)

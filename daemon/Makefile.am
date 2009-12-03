@@ -10,7 +10,7 @@ INCLUDES =					\
 	-I$(top_srcdir)/common			\
 	-I$(top_builddir)			\
 	$(GLIB_CFLAGS) $(DBUS_CFLAGS) 		\
-	$(OBEXFTP_CFLAGS) $(XML_CFLAGS)		\
+	$(OBEXFTP_CFLAGS) $(EXPAT_CFLAGS)	\
 	$(KEYRING_CFLAGS)			\
 	-DDBUS_API_SUBJECT_TO_CHANGE		\
 	-DG_UDEV_API_IS_SUBJECT_TO_CHANGE	\
@@ -28,14 +28,14 @@ libraries =						\
 
 # D-BUS service file
 %.service: %.service.in ../config.log
-	sed -e "s|\@libexecdir\@|$(libexecdir)|" $< > $@
+	$(AM_V_GEN) $(SED) -e "s|\@libexecdir\@|$(libexecdir)|" $< > $@
 
 servicedir = $(DBUS_SERVICE_DIR)
 service_in_files = gvfs-daemon.service.in
 service_DATA = gvfs-daemon.service
 
 %.mount: %.mount.in ../config.log
-	sed -e "s|\@libexecdir\@|$(libexecdir)|" $< > $@
+	$(AM_V_GEN) $(SED) -e "s|\@libexecdir\@|$(libexecdir)|" $< > $@
 
 libexec_PROGRAMS=gvfsd gvfsd-sftp gvfsd-trash gvfsd-computer gvfsd-burn gvfsd-localtest gvfsd-ftp
 
@@ -88,10 +88,10 @@ libexec_PROGRAMS += gvfsd-obexftp
 BUILT_SOURCES = obexftp-marshal.c obexftp-marshal.h
 
 obexftp-marshal.h: obexftp-marshal.list
-	glib-genmarshal $< --prefix=obexftp_marshal --header > $@
+	$(AM_V_GEN) glib-genmarshal $< --prefix=obexftp_marshal --header > $@
 
 obexftp-marshal.c: obexftp-marshal.list
-	echo "#include \"obexftp-marshal.h\"" > $@ && glib-genmarshal $< --prefix=obexftp_marshal --body >> $@
+	$(AM_V_GEN) echo "#include \"obexftp-marshal.h\"" > $@ && glib-genmarshal $< --prefix=obexftp_marshal --body >> $@
 
 endif
 
@@ -105,6 +105,12 @@ mount_in_files += archive.mount.in
 if HAVE_ARCHIVE
 mount_DATA += archive.mount
 libexec_PROGRAMS += gvfsd-archive
+endif
+
+mount_in_files += afc.mount.in
+if USE_AFC
+mount_DATA += afc.mount
+libexec_PROGRAMS += gvfsd-afc
 endif
 
 EXTRA_DIST = gvfs-daemon.service.in $(mount_in_files) obexftp-marshal.list
@@ -239,7 +245,7 @@ if USE_HAL
 gvfsd_obexftp_CPPFLAGS += $(HAL_CFLAGS)
 endif
 
-gvfsd_obexftp_LDADD = $(OBEXFTP_LIBS) $(XML_LIBS) $(libraries)
+gvfsd_obexftp_LDADD = $(OBEXFTP_LIBS) $(EXPAT_LIBS) $(libraries)
 if USE_HAL
 gvfsd_obexftp_LDADD += $(HAL_LIBS)
 endif
@@ -462,3 +468,20 @@ gvfsd_dav_LDADD = $(libraries) $(HTTP_LIBS)
 if HAVE_AVAHI
 gvfsd_dav_LDADD += $(top_builddir)/common/libgvfscommon-dnssd.la
 endif
+
+gvfsd_afc_SOURCES = \
+	gvfsbackendafc.c gvfsbackendafc.h \
+	daemon-main.c daemon-main.h \
+	daemon-main-generic.c
+
+gvfsd_afc_CPPFLAGS = \
+	-DBACKEND_HEADER=gvfsbackendafc.h \
+	-DDEFAULT_BACKEND_TYPE=afc \
+	-DMAX_JOB_THREADS=1 \
+	$(AFC_CFLAGS) \
+	-DBACKEND_TYPES='"afc", G_VFS_TYPE_BACKEND_AFC,'
+
+gvfsd_afc_LDADD = \
+	$(libraries) \
+	$(AFC_LIBS)
+

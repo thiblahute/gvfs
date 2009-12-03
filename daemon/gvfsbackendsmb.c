@@ -602,7 +602,7 @@ do_mount (GVfsBackend *backend,
       
       if (op_backend->mount_cancelled) 
         g_vfs_job_failed (G_VFS_JOB (job),
-			  G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
+			  G_IO_ERROR, G_IO_ERROR_FAILED_HANDLED,
 			  _("Password dialog cancelled"));
       else
         g_vfs_job_failed (G_VFS_JOB (job),
@@ -1591,8 +1591,45 @@ do_query_fs_info (GVfsBackend *backend,
 		  GFileInfo *info,
 		  GFileAttributeMatcher *attribute_matcher)
 {
+  GVfsBackendSmb *op_backend = G_VFS_BACKEND_SMB (backend);
+
   g_file_info_set_attribute_string (info, G_FILE_ATTRIBUTE_FILESYSTEM_TYPE, "cifs");
-  
+
+#ifdef HAVE_SAMBA_STAT_VFS
+  smbc_statvfs_fn smbc_statvfs;
+  struct statvfs st = {0};
+  char *uri;
+  int res;
+
+  if (g_file_attribute_matcher_matches (attribute_matcher,
+					G_FILE_ATTRIBUTE_FILESYSTEM_SIZE) ||
+      g_file_attribute_matcher_matches (attribute_matcher,
+					G_FILE_ATTRIBUTE_FILESYSTEM_FREE) ||
+      g_file_attribute_matcher_matches (attribute_matcher,
+					G_FILE_ATTRIBUTE_FILESYSTEM_READONLY))
+    {
+      uri = create_smb_uri (op_backend->server, op_backend->share, filename);
+      smbc_statvfs = smbc_getFunctionStatVFS (op_backend->smb_context);
+      res = smbc_statvfs (op_backend->smb_context, uri, &st);
+      g_free (uri);
+
+      if (res == 0)
+        {
+          /* older samba versions ( < 3.0.28) return zero values in struct statvfs */
+          if (st.f_blocks > 0)
+            {
+              /* FIXME: inconsistent return values (libsmbclient-3.4.2)
+               *       - for linux samba hosts, f_frsize is zero and f_bsize is a real block size
+               *       - for some Windows hosts (XP), f_frsize and f_bsize should be multiplied to get real block size
+               */
+              g_file_info_set_attribute_uint64 (info, G_FILE_ATTRIBUTE_FILESYSTEM_SIZE, st.f_bsize * st.f_blocks * ((st.f_frsize == 0) ? 1 : st.f_frsize));
+              g_file_info_set_attribute_uint64 (info, G_FILE_ATTRIBUTE_FILESYSTEM_FREE, st.f_bsize * st.f_bfree * ((st.f_frsize == 0) ? 1 : st.f_frsize));
+              g_file_info_set_attribute_boolean (info, G_FILE_ATTRIBUTE_FILESYSTEM_READONLY, st.f_flag & SMBC_VFS_FEATURE_RDONLY);
+            }
+        }
+    }
+#endif
+
   g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 

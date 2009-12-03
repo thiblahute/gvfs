@@ -982,7 +982,7 @@ do_mount (GVfsBackend *backend,
     {
       if (op_backend->mount_cancelled)
         g_vfs_job_failed (G_VFS_JOB (job),
-                         G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
+                         G_IO_ERROR, G_IO_ERROR_FAILED_HANDLED,
                          _("Password dialog cancelled"));
       else
         /* TODO: Error from errno? */
@@ -1494,7 +1494,7 @@ g_vfs_backend_smb_browse_class_init (GVfsBackendSmbBrowseClass *klass)
     }
 #endif
 
-  DEBUG ("g_vfs_backend_smb_browse_class_init - default workgroup = '%s'\n", default_workgroup);
+  DEBUG ("g_vfs_backend_smb_browse_class_init - default workgroup = '%s'\n", default_workgroup ? default_workgroup : "NULL");
 }
 
 void

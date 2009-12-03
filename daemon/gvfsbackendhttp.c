@@ -47,6 +47,7 @@
 #include "gvfsjobqueryattributes.h"
 #include "gvfsjobenumerate.h"
 #include "gvfsdaemonprotocol.h"
+#include "gvfsdaemonutils.h"
 
 #include "soup-input-stream.h"
 
@@ -81,6 +82,7 @@ g_vfs_backend_http_init (GVfsBackendHttp *backend)
 {
   const char         *debug;
   SoupSessionFeature *proxy_resolver;
+  SoupSessionFeature *cookie_jar;
 
   g_vfs_backend_set_user_visible (G_VFS_BACKEND (backend), FALSE);  
 
@@ -97,6 +99,13 @@ g_vfs_backend_http_init (GVfsBackendHttp *backend)
   soup_session_add_feature (backend->session, proxy_resolver);
   soup_session_add_feature (backend->session_async, proxy_resolver);
   g_object_unref (proxy_resolver);
+
+  /* Cookie handling - stored temporarlly in memory, mostly useful for
+   * authentication in WebDAV. */
+  cookie_jar = g_object_new (SOUP_TYPE_COOKIE_JAR, NULL);
+  soup_session_add_feature (backend->session, cookie_jar);
+  soup_session_add_feature (backend->session_async, cookie_jar);
+  g_object_unref (cookie_jar);
 
   /* Logging */
   debug = g_getenv ("GVFS_HTTP_DEBUG");
@@ -528,28 +537,15 @@ try_close_read (GVfsBackend       *backend,
 
 /* *** query_info () *** */
 
-static void 
-query_info_ready (SoupSession *session,
-                  SoupMessage *msg,
-                  gpointer     user_data)
+static void
+file_info_from_message (SoupMessage *msg,
+                        GFileInfo *info,
+                        GFileAttributeMatcher *matcher)
 {
-  GFileAttributeMatcher *matcher;
-  GVfsJobQueryInfo      *job;
-  const SoupURI         *uri;
-  const char            *text;
-  GFileInfo             *info;
-  char                  *basename;
-
-  job     = G_VFS_JOB_QUERY_INFO (user_data);
-  info    = job->file_info;
-  matcher = job->attribute_matcher;
-
-  if (! SOUP_STATUS_IS_SUCCESSFUL (msg->status_code))
-    {
-      g_vfs_job_failed_from_http_status (G_VFS_JOB (job), msg->status_code,
-                                         msg->reason_phrase);
-      return;
-    }
+  const SoupURI *uri;
+  const char    *text;
+  char          *basename;
+  char          *ed_name = NULL;
 
   uri = soup_message_get_uri (msg);
   basename = http_uri_get_basename (uri->path);
@@ -561,55 +557,31 @@ query_info_ready (SoupSession *session,
   if (basename != NULL &&
       g_file_attribute_matcher_matches (matcher,
                                         G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME))
-    {
-      char *display_name = g_filename_display_name (basename);
+    ed_name = gvfs_file_info_populate_names_as_local (info, basename);
 
-      if (strstr (display_name, "\357\277\275") != NULL)
-        {
-          char *p = display_name;
-          display_name = g_strconcat (display_name, _(" (invalid encoding)"), NULL);
-          g_free (p);
-        }
-
-      g_file_info_set_display_name (info, display_name);
-      g_free (display_name);
-    }
-
-  if (basename != NULL &&
+  if (ed_name != NULL &&
       g_file_attribute_matcher_matches (matcher,
                                         G_FILE_ATTRIBUTE_STANDARD_EDIT_NAME))
-    {
-      char *edit_name = g_filename_display_name (basename);
-      g_file_info_set_edit_name (info, edit_name);
-      g_free (edit_name);
-    } 
+    g_file_info_set_edit_name (info, ed_name);
 
   g_free (basename);
+  g_free (ed_name);
 
+  if (soup_message_headers_get_encoding(msg->response_headers) == SOUP_ENCODING_CONTENT_LENGTH)
+    g_file_info_set_size (info, soup_message_headers_get_content_length (msg->response_headers));
 
-  text = soup_message_headers_get (msg->response_headers,
-                                   "Content-Length");
+  text = soup_message_headers_get_content_type (msg->response_headers, NULL);
   if (text)
     {
-      guint64 size = g_ascii_strtoull (text, NULL, 10);
-      g_file_info_set_size (info, size);
-    }
+      GIcon *icon;
 
+      g_file_info_set_file_type (info, G_FILE_TYPE_REGULAR);
+      g_file_info_set_content_type (info, text);
+      g_file_info_set_attribute_string (info, G_FILE_ATTRIBUTE_STANDARD_FAST_CONTENT_TYPE, text);
 
-  text = soup_message_headers_get (msg->response_headers,
-                                   "Content-Type");
-  if (text)
-    {
-      char *p = strchr (text, ';');
-
-      if (p != NULL)
-        {
-          char *tmp = g_strndup (text, p - text);
-          g_file_info_set_content_type (info, tmp);
-          g_free (tmp);
-        }
-      else
-        g_file_info_set_content_type (info, text);
+      icon = g_content_type_get_icon (text);
+      g_file_info_set_icon (info, icon);
+      g_object_unref (icon);
     }
 
 
@@ -638,7 +610,29 @@ query_info_ready (SoupSession *session,
                                         G_FILE_ATTRIBUTE_ETAG_VALUE,
                                         text);
     }
+}
 
+static void
+query_info_ready (SoupSession *session,
+                  SoupMessage *msg,
+                  gpointer     user_data)
+{
+  GFileAttributeMatcher *matcher;
+  GVfsJobQueryInfo      *job;
+  GFileInfo             *info;
+
+  job     = G_VFS_JOB_QUERY_INFO (user_data);
+  info    = job->file_info;
+  matcher = job->attribute_matcher;
+
+  if (! SOUP_STATUS_IS_SUCCESSFUL (msg->status_code))
+    {
+      g_vfs_job_failed_from_http_status (G_VFS_JOB (job), msg->status_code,
+                                         msg->reason_phrase);
+      return;
+    }
+
+  file_info_from_message (msg, info, matcher);
 
   g_vfs_job_succeeded (G_VFS_JOB (job));
 }
@@ -665,6 +659,24 @@ try_query_info (GVfsBackend           *backend,
 }
 
 
+static gboolean
+try_query_info_on_read (GVfsBackend           *backend,
+                        GVfsJobQueryInfoRead  *job,
+                        GVfsBackendHandle      handle,
+                        GFileInfo             *info,
+                        GFileAttributeMatcher *attribute_matcher)
+{
+    SoupMessage *msg = soup_input_stream_get_message (G_INPUT_STREAM (handle));
+
+    file_info_from_message (msg, info, attribute_matcher);
+    g_object_unref (msg);
+
+    g_vfs_job_succeeded (G_VFS_JOB (job));
+
+    return TRUE;
+}
+
+
 static void
 g_vfs_backend_http_class_init (GVfsBackendHttpClass *klass)
 {
@@ -675,11 +687,11 @@ g_vfs_backend_http_class_init (GVfsBackendHttpClass *klass)
 
   backend_class = G_VFS_BACKEND_CLASS (klass); 
 
-  backend_class->try_mount         = try_mount;
-  backend_class->try_open_for_read = try_open_for_read;
-  backend_class->try_read          = try_read;
-  backend_class->try_seek_on_read  = try_seek_on_read;
-  backend_class->try_close_read    = try_close_read;
-  backend_class->try_query_info    = try_query_info;
-
+  backend_class->try_mount              = try_mount;
+  backend_class->try_open_for_read      = try_open_for_read;
+  backend_class->try_read               = try_read;
+  backend_class->try_seek_on_read       = try_seek_on_read;
+  backend_class->try_close_read         = try_close_read;
+  backend_class->try_query_info         = try_query_info;
+  backend_class->try_query_info_on_read = try_query_info_on_read;
 }

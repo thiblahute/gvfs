@@ -158,6 +158,7 @@ struct _MetaTree {
   int fd;
   char *data;
   gsize len;
+  ino_t inode;
 
   guint32 tag;
   gint64 time_t_base;
@@ -469,6 +470,7 @@ meta_tree_init (MetaTree *tree)
 
   tree->fd = fd;
   tree->len = statbuf.st_size;
+  tree->inode = statbuf.st_ino;
   tree->data = data;
   tree->header = (MetaFileHeader *)data;
 
@@ -614,12 +616,24 @@ meta_tree_unref (MetaTree *tree)
 static gboolean
 meta_tree_needs_rereading (MetaTree *tree)
 {
+  struct stat statbuf;
+
   if (tree->fd == -1)
     return TRUE;
 
   if (tree->header != NULL &&
       GUINT32_FROM_BE (tree->header->rotated) == 0)
     return FALSE; /* Got a valid tree and its not rotated */
+
+  /* Sanity check to avoid infinite loops when a stable file
+     has the rotated bit set to 1 (see gnome bugzilla bug #600057) */
+
+  if (lstat (tree->filename, &statbuf) != 0)
+    return FALSE;
+
+  if (tree->inode == statbuf.st_ino)
+    return FALSE;
+
   return TRUE;
 }
 
@@ -1643,7 +1657,7 @@ meta_tree_lookup_stringv   (MetaTree                         *tree,
       num_strings = GUINT32_FROM_BE (stringv->num_strings);
       res = g_new (char *, num_strings + 1);
       for (i = 0; i < num_strings; i++)
-	res[i] = verify_string (tree, stringv->strings[i]);
+	res[i] = g_strdup (verify_string (tree, stringv->strings[i]));
       res[i] = NULL;
     }
 

@@ -1,4 +1,4 @@
-/*
+/**
  *  GIO - GLib Input, Output and Streaming Library
  *
  * Copyright (C) Thibault Saunier 2009 <saunierthibault@gmail.com>
@@ -19,7 +19,7 @@
  * Boston, MA 02111-1307, USA.
  *
  * Author: Thibault Saunier <saunierthibault@gmail.com>
- */
+ **/
 
 #include <config.h>
 
@@ -103,10 +103,11 @@ g_vfs_backend_gdocs_remove_gdocs_file  (GVfsBackendGdocs   *backend,
 {
     const gchar *entry_id;
     GDataDocumentsEntry *entry;
+    GHashTable *entries;
 
     g_return_if_fail (G_VFS_IS_GDOCS_FILE (file));
 
-    GHashTable *entries = backend->priv->entries;
+    entries = backend->priv->entries;
     
     if (g_vfs_gdocs_file_is_root (file))
         entry_id = "/";
@@ -415,7 +416,7 @@ do_move (GVfsBackend            *backend,
 
     if (flags & G_FILE_COPY_BACKUP)
       {
-        /* TODO, Implement it*/
+        /* TODO, Implement it backup handling*/
         g_vfs_job_failed (G_VFS_JOB (job),
                     G_IO_ERROR,
                     G_IO_ERROR_CANT_CREATE_BACKUP,
@@ -1015,6 +1016,7 @@ try_write (GVfsBackend       *backend,
     GCancellable        *cancellable = G_VFS_JOB (job)->cancellable;
     GOutputStream       *output_stream = G_OUTPUT_STREAM (handle);
 
+    g_message ("Trying to write file");
     g_output_stream_write_async (output_stream,
                                  buffer,
                                  buffer_size,
@@ -1165,7 +1167,7 @@ do_replace (GVfsBackend         *backend,
 
     if (make_backup)
       {
-        /* TODO: implement! */
+        /* TODO: implement backup handling */
         g_set_error_literal (&error,
                              G_IO_ERROR,
                              G_IO_ERROR_CANT_CREATE_BACKUP,
@@ -1216,74 +1218,110 @@ do_push (GVfsBackend *backend,
     const gchar             *entry_id;
     GDataDocumentsEntry     *entry, *new_entry;
     GFile                   *local_file;
+    GFileInfo               *local_file_info;
+    GFileType               local_file_type;
     GVfsGDocsFile           *destination_folder, *file;
 
     GError                  *error = NULL;
     GDataDocumentsFolder    *folder_entry = NULL;
+
+    gboolean                overwrite = (flags & G_FILE_COPY_OVERWRITE);
     GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
+
     GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (gdocs_backend);
 
-    destination_folder = g_vfs_gdocs_file_new_parent_from_gvfs (gdocs_backend,
-                                                                destination,
-                                                                cancellable,
-                                                                &error);
-    if (error != NULL)
-      {
-        g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-        g_error_free (error);
-        return;
-      }
-
-    if (g_vfs_gdocs_file_is_root (destination_folder))
-        destination_folder = NULL;
-    else
-      {
-        GDataDocumentsEntry *tmp_entry;
-        tmp_entry = g_vfs_gdocs_file_get_document_entry (destination_folder),
-        folder_entry = GDATA_DOCUMENTS_FOLDER (tmp_entry);
-      }
-
-    entry = GDATA_DOCUMENTS_ENTRY (gdata_documents_spreadsheet_new (NULL));
-    destination_filename = g_path_get_basename (destination);
-    gdata_entry_set_title (GDATA_ENTRY (entry), destination_filename);
-    g_free (destination_filename);
+    /* TODO check how to do for folder 
+     * Create dir and make recursion to upload files*/
 
     g_message ("Destination name:local path %s", local_path);
     local_file = g_file_new_for_path (local_path);
-    new_entry = gdata_documents_service_upload_document (service,
-                                                         NULL,
-                                                         local_file,
-                                                         folder_entry,
-                                                         cancellable,
-                                                         &error);
-    g_object_unref (entry);
-    g_object_unref (local_file);
+    local_file_info = g_file_query_info (local_file, "standard::type", G_FILE_QUERY_INFO_NONE, cancellable, &error);
+    local_file_type = g_file_info_get_file_type (local_file_info);
 
-    if (error != NULL)
+    /* Is directory case */
+    if (local_file_type == G_FILE_TYPE_DIRECTORY)
       {
-        g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-        g_error_free (error);
-        if (new_entry != NULL)
-            g_object_unref (new_entry);
+        if (overwrite)
+          {
+            g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR,
+                              G_IO_ERROR_WOULD_MERGE,
+                              _("Can't copy directory over directory"));
+            return;
+          }
+        else
+          {
+            g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR,
+                        G_IO_ERROR_EXISTS,
+                        _("Target file exists"));
+            return;
+          }
+        g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR,
+                    G_IO_ERROR_WOULD_RECURSE,
+                    _("Can't recursively copy directory"));
         return;
       }
-
-    /* We keep the #GHashTable::entries property up to date */
-    entry_id = gdata_documents_entry_get_document_id (new_entry);
-    file = g_vfs_gdocs_file_new_from_document_entry (gdocs_backend, new_entry, &error);
-    if (error != NULL)
+    else
       {
-        g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-        g_error_free (error);
-        if (new_entry != NULL)
-            g_object_unref (new_entry);
-        return;
-      }
-    g_vfs_backend_gdocs_add_gdocs_file (gdocs_backend, file);
+        destination_folder = g_vfs_gdocs_file_new_parent_from_gvfs (gdocs_backend,
+                                                                    destination,
+                                                                    cancellable,
+                                                                    &error);
+        if (error != NULL)
+          {
+            g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+            g_error_free (error);
+            return;
+          }
 
-    g_object_unref (entry);
-    g_object_unref (new_entry);
+
+        if (g_vfs_gdocs_file_is_root (destination_folder))
+          destination_folder = NULL;
+        else
+          {
+            GDataDocumentsEntry *tmp_entry;
+            tmp_entry = g_vfs_gdocs_file_get_document_entry (destination_folder),
+                      folder_entry = GDATA_DOCUMENTS_FOLDER (tmp_entry);
+          }
+
+        entry = GDATA_DOCUMENTS_ENTRY (gdata_documents_spreadsheet_new (NULL));
+        destination_filename = g_path_get_basename (destination);
+        gdata_entry_set_title (GDATA_ENTRY (entry), destination_filename);
+        g_free (destination_filename);
+        new_entry = gdata_documents_service_upload_document (service,
+                    NULL,
+                    local_file,
+                    folder_entry,
+                    cancellable,
+                    &error);
+        g_object_unref (entry);
+        g_object_unref (local_file);
+
+        if (error != NULL)
+          {
+            g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+            g_error_free (error);
+            if (new_entry != NULL)
+              g_object_unref (new_entry);
+            return;
+          }
+
+        /* We keep the #GHashTable::entries property up to date */
+        entry_id = gdata_documents_entry_get_document_id (new_entry);
+        file = g_vfs_gdocs_file_new_from_document_entry (gdocs_backend, new_entry, &error);
+        if (error != NULL)
+          {
+            g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+            g_error_free (error);
+            if (new_entry != NULL)
+              g_object_unref (new_entry);
+            return;
+          }
+        g_vfs_backend_gdocs_add_gdocs_file (gdocs_backend, file);
+
+        g_object_unref (entry);
+        g_object_unref (new_entry);
+      }
 
     g_vfs_job_succeeded (G_VFS_JOB (job));
 }
@@ -1360,9 +1398,8 @@ do_create (GVfsBackend          *backend,
     GCancellable *cancellable = G_VFS_JOB (job)->cancellable;
     GDataDocumentsService *service = g_vfs_backend_gdocs_get_service (gdocs_backend);
 
-    /*  TODO 
-     *  Figure out how the content_type and title should be found
-     **/
+    g_message ("Trying to create file");
+    /*  TODO Figure out how the content_type and title should be found*/
     file = g_file_new_for_path (filename);
     file_info =  g_file_query_info (file,
                                     "standard::display-name,standard::content-type",

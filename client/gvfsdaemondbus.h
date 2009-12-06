@@ -72,8 +72,8 @@ DBusMessage *   _g_vfs_daemon_call_sync                 (DBusMessage            
 							 gpointer                        callback_user_data,
 							 GCancellable                   *cancellable,
 							 GError                        **error);
-GFileInfo *     _g_dbus_get_file_info                   (DBusMessageIter                *iter,
-							 GError                        **error);
+/*GFileInfo *     _g_dbus_get_file_info                   (DBusMessageIter                *iter,*/
+/*GError                        **error);*/
 
 void        _g_simple_async_result_complete_with_cancellable
                                                         (GSimpleAsyncResult             *result,

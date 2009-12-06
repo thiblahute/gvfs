@@ -394,7 +394,7 @@ list_mounts (GList *mounts,
           if (uuid)
             g_print ("%*suuid=%s\n", indent + 2, "", uuid);
 
-          default_location = g_mount_get_default_location (mount);
+          /*  default_location = g_mount_get_default_location (mount);*/
           if (default_location)
             {
               char *loc_uri = g_file_get_uri (default_location);

@@ -1061,16 +1061,37 @@ find_disc_volume_for_device_file (GGduVolumeMonitor *monitor,
                                   const gchar       *device_file)
 {
   GList *l;
+  GGduVolume *ret;
+  struct stat stat_buf;
+
+  ret = NULL;
+
+  if (stat (device_file, &stat_buf) == 0)
+    {
+      for (l = monitor->disc_volumes; l != NULL; l = l->next)
+        {
+          GGduVolume *volume = G_GDU_VOLUME (l->data);
+          if (g_gdu_volume_has_dev (volume, stat_buf.st_rdev))
+            {
+              ret = volume;
+              goto out;
+            }
+        }
+    }
 
   for (l = monitor->disc_volumes; l != NULL; l = l->next)
     {
       GGduVolume *volume = G_GDU_VOLUME (l->data);
 
       if (g_gdu_volume_has_device_file (volume, device_file))
-        return volume;
+        {
+          ret = volume;
+          goto out;
+        }
     }
 
-  return NULL;
+ out:
+  return ret;
 }
 
 static GGduVolume *
@@ -1079,8 +1100,23 @@ find_volume_for_device_file (GGduVolumeMonitor *monitor,
 {
   GList *l;
   GGduVolume *ret;
+  struct stat stat_buf;
 
   ret = NULL;
+
+  if (stat (device_file, &stat_buf) == 0)
+    {
+      for (l = monitor->volumes; l != NULL; l = l->next)
+        {
+          GGduVolume *volume = G_GDU_VOLUME (l->data);
+          if (g_gdu_volume_has_dev (volume, stat_buf.st_rdev))
+            {
+              ret = volume;
+              goto out;
+            }
+        }
+    }
+
   for (l = monitor->volumes; l != NULL; l = l->next)
     {
       GGduVolume *volume = G_GDU_VOLUME (l->data);
@@ -1113,12 +1149,19 @@ find_drive_by_device_file (GGduVolumeMonitor *monitor,
                            const gchar       *device_file)
 {
   GList *l;
+  struct stat stat_buf;
+
+  if (stat (device_file, &stat_buf) != 0)
+    {
+      g_warning ("%s:%s: Error statting %s: %m", G_STRLOC, G_STRFUNC, device_file);
+      return NULL;
+    }
 
   for (l = monitor->drives; l != NULL; l = l->next)
     {
       GGduDrive *drive = G_GDU_DRIVE (l->data);
 
-      if (g_gdu_drive_has_device_file (drive, device_file))
+      if (g_gdu_drive_has_dev (drive, stat_buf.st_rdev))
         return drive;
     }
 
@@ -1298,24 +1341,36 @@ update_volumes (GGduVolumeMonitor *monitor,
 
       if (volume == NULL)
         {
-          GduPresentable *toplevel_presentable;
+          GduPresentable *toplevel_drive;
 
-          toplevel_presentable = gdu_presentable_get_toplevel (p);
-          if (toplevel_presentable != NULL)
+          toplevel_drive = gdu_presentable_get_enclosing_presentable (p);
+          /* handle logical partitions enclosed by an extented partition */
+          if (GDU_IS_VOLUME (toplevel_drive))
             {
-              GduDevice *toplevel_device;
+              GduPresentable *temp;
+              temp = toplevel_drive;
+              toplevel_drive = gdu_presentable_get_enclosing_presentable (toplevel_drive);
+              g_object_unref (temp);
+            }
 
-              drive = NULL;
-              toplevel_device = gdu_presentable_get_device (toplevel_presentable);
-              if (toplevel_device != NULL)
+          if (toplevel_drive != NULL)
+            {
+              if (GDU_IS_DRIVE (toplevel_drive))
                 {
-                  drive = find_drive_by_device_file (monitor, gdu_device_get_device_file (toplevel_device));
-                  /*g_debug ("adding volume %s (drive %s)",
-                           gdu_device_get_device_file (d),
-                           gdu_device_get_device_file (toplevel_device));*/
-                  g_object_unref (toplevel_device);
+                  GduDevice *toplevel_drive_device;
+
+                  drive = NULL;
+                  toplevel_drive_device = gdu_presentable_get_device (toplevel_drive);
+                  if (toplevel_drive_device != NULL)
+                    {
+                      drive = find_drive_by_device_file (monitor, gdu_device_get_device_file (toplevel_drive_device));
+                      /*g_debug ("adding volume %s (drive %s)",
+                        gdu_device_get_device_file (d),
+                        gdu_device_get_device_file (toplevel_device));*/
+                      g_object_unref (toplevel_drive_device);
+                    }
                 }
-              g_object_unref (toplevel_presentable);
+              g_object_unref (toplevel_drive);
             }
           else
             {
@@ -1512,7 +1567,7 @@ update_mounts (GGduVolumeMonitor *monitor,
       if (volume == NULL)
         volume = find_volume_for_mount_path (monitor, mount_path);
 
-      /*g_debug ("adding mount %s (vol %p)", g_unix_mount_get_device_path (mount_entry), volume);*/
+      /*g_debug ("adding mount %s (vol %p) (device %s, mount_path %s)", g_unix_mount_get_device_path (mount_entry), volume, device_file, mount_path);*/
       mount = g_gdu_mount_new (G_VOLUME_MONITOR (monitor), mount_entry, volume);
       if (mount)
         {
@@ -1640,24 +1695,36 @@ update_discs (GGduVolumeMonitor *monitor,
 
       if (volume == NULL)
         {
-          GduPresentable *toplevel_presentable;
+          GduPresentable *toplevel_drive;
 
-          toplevel_presentable = gdu_presentable_get_toplevel (p);
-          if (toplevel_presentable != NULL)
+          toplevel_drive = gdu_presentable_get_enclosing_presentable (p);
+          /* handle logical partitions enclosed by an extented partition */
+          if (GDU_IS_VOLUME (toplevel_drive))
             {
-              GduDevice *toplevel_device;
+              GduPresentable *temp;
+              temp = toplevel_drive;
+              toplevel_drive = gdu_presentable_get_enclosing_presentable (toplevel_drive);
+              g_object_unref (temp);
+            }
 
-              drive = NULL;
-              toplevel_device = gdu_presentable_get_device (toplevel_presentable);
-              if (toplevel_device != NULL)
+          if (toplevel_drive != NULL)
+            {
+              if (GDU_IS_DRIVE (toplevel_drive))
                 {
-                  drive = find_drive_by_device_file (monitor, gdu_device_get_device_file (toplevel_device));
-                  /*g_debug ("adding volume %s (drive %s)",
-                           gdu_device_get_device_file (d),
-                           gdu_device_get_device_file (toplevel_device));*/
-                  g_object_unref (toplevel_device);
+                  GduDevice *toplevel_drive_device;
+
+                  drive = NULL;
+                  toplevel_drive_device = gdu_presentable_get_device (toplevel_drive);
+                  if (toplevel_drive_device != NULL)
+                    {
+                      drive = find_drive_by_device_file (monitor, gdu_device_get_device_file (toplevel_drive_device));
+                      /*g_debug ("adding volume %s (drive %s)",
+                        gdu_device_get_device_file (d),
+                        gdu_device_get_device_file (toplevel_device));*/
+                      g_object_unref (toplevel_drive_device);
+                    }
                 }
-              g_object_unref (toplevel_presentable);
+              g_object_unref (toplevel_drive);
             }
           else
             {

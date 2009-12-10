@@ -77,6 +77,7 @@ struct _GGduVolume
   GFile *activation_root;
   gchar *name;
   gchar *device_file;
+  dev_t dev;
   gchar *uuid;
   gboolean can_mount;
   gboolean should_automount;
@@ -179,6 +180,7 @@ update_volume (GGduVolume *volume)
   gboolean old_should_automount;
   gchar *old_name;
   gchar *old_device_file;
+  dev_t old_dev;
   GIcon *old_icon;
   gboolean keep_cleartext_volume;
 
@@ -187,6 +189,7 @@ update_volume (GGduVolume *volume)
   old_should_automount = volume->should_automount;
   old_name = g_strdup (volume->name);
   old_device_file = g_strdup (volume->device_file);
+  old_dev = volume->dev;
   old_icon = volume->icon != NULL ? g_object_ref (volume->icon) : NULL;
 
   /* ---------------------------------------------------------------------------------------------------- */
@@ -194,11 +197,14 @@ update_volume (GGduVolume *volume)
   /* if the volume is a fstab mount point, get the data from there */
   if (volume->unix_mount_point != NULL)
     {
+      struct stat_buf;
+
       volume->can_mount = TRUE;
       volume->should_automount = FALSE;
 
       g_free (volume->device_file);
       volume->device_file = g_strdup (g_unix_mount_point_get_device_path (volume->unix_mount_point));
+      volume->dev = 0;
 
       if (volume->icon != NULL)
         g_object_unref (volume->icon);
@@ -289,9 +295,15 @@ update_volume (GGduVolume *volume)
 
       g_free (volume->device_file);
       if (luks_cleartext_volume_device != NULL)
-        volume->device_file = g_strdup (gdu_device_get_device_file (luks_cleartext_volume_device));
+        {
+          volume->device_file = g_strdup (gdu_device_get_device_file (luks_cleartext_volume_device));
+          volume->dev = gdu_device_get_dev (luks_cleartext_volume_device);
+        }
       else
-        volume->device_file = NULL;
+        {
+          volume->device_file = NULL;
+          volume->dev = 0;
+        }
 
       volume->can_mount = TRUE;
 
@@ -327,19 +339,68 @@ update_volume (GGduVolume *volume)
 
       g_free (volume->device_file);
       if (device != NULL)
-        volume->device_file = g_strdup (gdu_device_get_device_file (device));
+        {
+          volume->device_file = g_strdup (gdu_device_get_device_file (device));
+          volume->dev = gdu_device_get_dev (device);
+        }
       else
-        volume->device_file = NULL;
+        {
+          volume->device_file = NULL;
+          volume->dev = 0;
+        }
 
       volume->can_mount = TRUE;
 
-      /* If a volume (partition) appear _much later_ than when media was insertion it
-       * can only be because the media was repartitioned. We don't want to automount
-       * such volumes.
+      /* Only automount filesystems from drives of known types/interconnects:
+       *
+       *  - USB
+       *  - Firewire
+       *  - sdio
+       *  - optical discs
+       *
+       * The mantra here is "be careful" - we really don't want to
+       * automount fs'es from all devices in a SAN etc - We REALLY
+       * need to be CAREFUL here.
+       *
+       * Sidebar: Actually, a surprisingly large number of admins like
+       *          to log into GNOME as root (thus having all polkit
+       *          authorizations) and if weren't careful we'd
+       *          automount all mountable devices from the box. See
+       *          the enterprise distro bug trackers for details.
        */
-      volume->should_automount = TRUE;
+      volume->should_automount = FALSE;
       if (volume->drive != NULL)
         {
+          GduPresentable *drive_presentable;
+          drive_presentable = g_gdu_drive_get_presentable (volume->drive);
+          if (drive_presentable != NULL)
+            {
+              GduDevice *drive_device;
+              drive_device = gdu_presentable_get_device (drive_presentable);
+              if (drive_device != NULL)
+                {
+                  if (gdu_device_is_drive (drive_device))
+                    {
+                      const gchar *connection_interface;
+
+                      connection_interface = gdu_device_drive_get_connection_interface (drive_device);
+
+                      if (g_strcmp0 (connection_interface, "usb") == 0 ||
+                          g_strcmp0 (connection_interface, "firewire") == 0 ||
+                          g_strcmp0 (connection_interface, "sdio") == 0 ||
+                          gdu_device_is_optical_disc (drive_device))
+                        {
+                          volume->should_automount = TRUE;
+                        }
+                    }
+                  g_object_unref (drive_device);
+                }
+            }
+
+          /* If a volume (partition) appear _much later_ than when media was inserted it
+           * can only be because the media was repartitioned. We don't want to automount
+           * such volumes.
+           */
           now = time (NULL);
           if (now - g_gdu_drive_get_time_of_last_media_insertion (volume->drive) > 5)
             volume->should_automount = FALSE;
@@ -369,6 +430,7 @@ update_volume (GGduVolume *volume)
               (old_should_automount == volume->should_automount) &&
               (g_strcmp0 (old_name, volume->name) == 0) &&
               (g_strcmp0 (old_device_file, volume->device_file) == 0) &&
+              (old_dev == volume->dev) &&
               g_icon_equal (old_icon, volume->icon)
               );
 
@@ -988,7 +1050,21 @@ mount_with_mount_operation (MountOpData *data)
 
   device = gdu_presentable_get_device (GDU_PRESENTABLE (data->volume->gdu_volume));
 
-  toplevel = gdu_presentable_get_toplevel (GDU_PRESENTABLE (data->volume->gdu_volume));
+  toplevel = gdu_presentable_get_enclosing_presentable (GDU_PRESENTABLE (data->volume->gdu_volume));
+  /* handle logical partitions enclosed by an extented partition */
+  if (GDU_IS_VOLUME (toplevel))
+    {
+      GduPresentable *temp;
+      temp = toplevel;
+      toplevel = gdu_presentable_get_enclosing_presentable (toplevel);
+      g_object_unref (temp);
+      if (!GDU_IS_DRIVE (toplevel))
+        {
+          g_object_unref (toplevel);
+          toplevel = NULL;
+        }
+    }
+
   if (toplevel != NULL)
     drive_name = gdu_presentable_get_name (toplevel);
 
@@ -1659,6 +1735,28 @@ g_gdu_volume_volume_iface_init (GVolumeIface *iface)
   iface->get_identifier = g_gdu_volume_get_identifier;
   iface->enumerate_identifiers = g_gdu_volume_enumerate_identifiers;
   iface->get_activation_root = g_gdu_volume_get_activation_root;
+}
+
+gboolean
+g_gdu_volume_has_dev (GGduVolume   *volume,
+                      dev_t         dev)
+{
+  dev_t _dev;
+
+  _dev = volume->dev;
+
+  if (volume->cleartext_gdu_volume != NULL)
+    {
+      GduDevice *luks_cleartext_volume_device;
+      luks_cleartext_volume_device = gdu_presentable_get_device (GDU_PRESENTABLE (volume->cleartext_gdu_volume));
+      if (luks_cleartext_volume_device != NULL)
+        {
+          _dev = gdu_device_get_dev (luks_cleartext_volume_device);
+          g_object_unref (luks_cleartext_volume_device);
+        }
+    }
+
+  return _dev == dev;
 }
 
 gboolean

@@ -72,7 +72,7 @@ convert_slashes (gchar *str)
 
 /**
  * g_path_get_parent_basename 
- * @gvfs_path : the name of the file.
+ * @gvfs_path: the name of the file.
  *
  * Gets the last component of the parent' gvfs_path.
  * If gvfs_path consists only of directory separators a single separator is returned.
@@ -173,12 +173,13 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
     g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
     g_return_val_if_fail (gvfs_path != NULL, NULL);
 
+    g_message ("New from GVFS: %s", gvfs_path);
     entry_id = g_path_get_basename (gvfs_path);
 
     /* if the GHashTable which makes the link between an entry-id and a type is empty,
      * we build it.
      **/
-    if (g_vfs_backend_gdocs_count_files (backend) == 0)
+    if (!g_vfs_backend_gdocs_is_used (backend))
       {
         g_vfs_backend_gdocs_rebuild_entries (backend, cancellable, error);
         if (*error != NULL)
@@ -482,8 +483,6 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *self,
             g_object_unref (info);
             return NULL;
           }
-        /*We set the size as the maximum size we can upload on the server*/
-        g_file_info_set_size (info, 1000); /*TODO check it*/
       }
 
     g_file_info_set_content_type (info, content_type);
@@ -701,7 +700,6 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *self,
                                 GError          **error)
 {
     GFile                   *new_file;
-    GDataDocumentsFeed      *tmp_feed;
     gchar                   *filename = NULL;
 
     GVfsBackendGdocs        *backend = self->priv->backend;
@@ -711,7 +709,7 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *self,
     g_return_val_if_fail (G_VFS_IS_GDOCS_FILE (self), NULL);
     g_return_val_if_fail (local_path != NULL, NULL);
 
-    g_print ("Downloadinf file to %s", local_path);
+    g_message ("Downloading file to %s", local_path);
 
     if (GDATA_IS_DOCUMENTS_SPREADSHEET (entry))
       {
@@ -781,6 +779,8 @@ g_vfs_gdocs_file_download_file (GVfsGDocsFile   *self,
         return NULL;
       }
 
+    /* TODO check that */
+    convert_slashes (filename);
     g_file_set_display_name (new_file, filename, cancellable, error);
     g_free (filename);
     if (*error != NULL)

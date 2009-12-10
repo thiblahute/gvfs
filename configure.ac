@@ -138,7 +138,7 @@ GDOCS_CFLAGS=
 GDOCS_LIBS=
 
 if test "x$enable_gdocs" != "xno"; then
-  PKG_CHECK_EXISTS(libgdata >= 0.4, msg_gdocs=yes)
+  PKG_CHECK_EXISTS(libgdata >= 0.5, msg_gdocs=yes)
 
   if test "x$msg_gdocs" = "xyes"; then
     PKG_CHECK_MODULES(GDOCS, libgdata)
@@ -727,7 +727,7 @@ echo "
         FTP/HTTP/WebDAV support       $msg_http
         ObexFTP support               $msg_obexftp
 	Samba support:	              $msg_samba
-	Google documents support	$msg_gdocs
+	Google documents support      $msg_gdocs
 	FUSE support:                 $msg_fuse
         CDDA support:                 $msg_cdda
         Gphoto2 support:              $msg_gphoto2

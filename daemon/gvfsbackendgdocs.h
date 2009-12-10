@@ -59,7 +59,7 @@ struct _GVfsBackendGdocs
     GVfsBackendGdocsPrivate *priv;
 };
 
-gint g_vfs_backend_gdocs_count_files (const GVfsBackendGdocs *backend);
+gboolean g_vfs_backend_gdocs_is_used (GVfsBackendGdocs *backend);
 GDataDocumentsService *g_vfs_backend_gdocs_get_service (const GVfsBackendGdocs *backend);
 void g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs  *backend,
                                           GCancellable      *cancellable,

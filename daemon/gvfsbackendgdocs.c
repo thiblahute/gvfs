@@ -69,17 +69,19 @@ G_DEFINE_TYPE (GVfsBackendGdocs, g_vfs_backend_gdocs, G_VFS_TYPE_BACKEND)
 
 /*Private structure*/
 struct _GVfsBackendGdocsPrivate {
-    GDataDocumentsService	*service;
-    GHashTable				*entries;
+    GDataDocumentsService *service;
+    GHashTable            *entries;
+    gboolean               is_used;       /* Some file operation has been done */
+    GVfsGDocsFile         *copying_dir;   /* Handles copying to folder in push */
 };
 
 /* ********************************************************************************** */
 /* Private functions */
 void
-g_vfs_backend_gdocs_add_gdocs_file (GVfsBackendGdocs   *backend,
-                                    GVfsGDocsFile      *file)
+g_vfs_backend_gdocs_add_gdocs_file (GVfsBackendGdocs *backend,
+                                    GVfsGDocsFile    *file)
 {
-    const gchar *entry_id;
+    const gchar         *entry_id;
     GDataDocumentsEntry *entry;
 
     GHashTable *entries = backend->priv->entries;
@@ -101,16 +103,16 @@ void
 g_vfs_backend_gdocs_remove_gdocs_file  (GVfsBackendGdocs   *backend,
                                         GVfsGDocsFile      *file)
 {
-    const gchar *entry_id;
+    const gchar         *entry_id;
     GDataDocumentsEntry *entry;
-    GHashTable *entries;
+    GHashTable          *entries;
 
     g_return_if_fail (G_VFS_IS_GDOCS_FILE (file));
 
     entries = backend->priv->entries;
-    
+
     if (g_vfs_gdocs_file_is_root (file))
-        entry_id = "/";
+      entry_id = "/";
     else
       { 
         entry = g_vfs_gdocs_file_get_document_entry (file);
@@ -123,7 +125,8 @@ g_vfs_backend_gdocs_remove_gdocs_file  (GVfsBackendGdocs   *backend,
 /* public utility functions */
 
 GVfsGDocsFile *
-g_vfs_backend_gdocs_look_up_file (const GVfsBackendGdocs *backend, const gchar *entry_id)
+g_vfs_backend_gdocs_look_up_file (const GVfsBackendGdocs *backend,
+                                  const gchar            *entry_id)
 {
     GHashTable *entries = backend->priv->entries; 
 
@@ -133,14 +136,11 @@ g_vfs_backend_gdocs_look_up_file (const GVfsBackendGdocs *backend, const gchar *
     return g_hash_table_lookup (entries, entry_id);
 }
 
-gint
-g_vfs_backend_gdocs_count_files (const GVfsBackendGdocs *backend)
+gboolean
+g_vfs_backend_gdocs_is_used (GVfsBackendGdocs *backend)
 {
-    GHashTable *entries = backend->priv->entries; 
-
-    g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), -1);
-
-    return g_hash_table_size (entries);
+    g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), FALSE);
+    return backend->priv->is_used;
 }
 
 GDataDocumentsService *
@@ -156,12 +156,12 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
                                      GCancellable       *cancellable,
                                      GError             **error)
 {
-    GList                   *list_entries;
-    GDataDocumentsQuery     *query;
-    GDataDocumentsFeed      *documents_feed;
-    GVfsGDocsFile           *root_file;
+    GList                 *list_entries;
+    GDataDocumentsQuery   *query;
+    GDataDocumentsFeed    *documents_feed;
+    GVfsGDocsFile         *root_file;
 
-    GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (backend);
+    GDataDocumentsService *service = g_vfs_backend_gdocs_get_service (backend);
 
     /*Get all entries (as feed) on the server*/
     query = gdata_documents_query_new (NULL);
@@ -172,12 +172,13 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
                                                               NULL,
                                                               NULL,
                                                               error);
+    g_message ("Building entries");
     g_object_unref (query);
 
     if (*error != NULL)
       {
         if (documents_feed != NULL)
-            g_object_unref (documents_feed);
+          g_object_unref (documents_feed);
         return;
       }
 
@@ -202,6 +203,7 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
                                                           NULL);
 
     g_vfs_backend_gdocs_add_gdocs_file (backend, root_file);
+    backend->priv->is_used = TRUE;
 }
 
 
@@ -214,19 +216,21 @@ do_mount (GVfsBackend   *backend,
           GMountSource  *mount_source,
           gboolean      is_automount)
 {
-    gchar                   *ask_user, *ask_password, *display_name;
-    const gchar             *username, *host;
-    gboolean                aborted, retval;
-    GMountSpec              *gdocs_mount_spec;
-    GAskPasswordFlags       flags;
+    gchar                 *ask_user              , *ask_password, *display_name;
+    const gchar           *username              , *host;
+    gboolean               aborted               , retval;
+    GMountSpec            *gdocs_mount_spec;
+    GAskPasswordFlags      flags;
+    GDataDocumentsService *service;
 
-    gchar                   *prompt = NULL;
-    gchar                   *full_username = NULL;
-    GError                  *error = NULL;
-    gboolean                show_dialog = TRUE;
-    GPasswordSave           password_save_flags = G_PASSWORD_SAVE_NEVER;
-    GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
-    GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (gdocs_backend);
+    gchar                 *prompt              = NULL;
+    gchar                 *full_username       = NULL;
+    GError                *error               = NULL;
+    gboolean               show_dialog         = TRUE;
+    GPasswordSave          password_save_flags = G_PASSWORD_SAVE_NEVER;
+    GVfsBackendGdocs      *gdocs_backend       = G_VFS_BACKEND_GDOCS (backend);
+
+    service = g_vfs_backend_gdocs_get_service (gdocs_backend);
 
     /*Get usename*/
     username = g_mount_spec_get (mount_spec, "user");
@@ -238,7 +242,7 @@ do_mount (GVfsBackend   *backend,
      * The default host is gmail.com since it's almost the only used
      **/
     if (host == NULL)
-        host = "gmail.com";
+      host = "gmail.com";
     else if (username == NULL)
       {
         username = host;
@@ -248,7 +252,7 @@ do_mount (GVfsBackend   *backend,
     /* Set the password asking flags.*/
     flags =  G_ASK_PASSWORD_NEED_PASSWORD;
     if (g_vfs_keyring_is_available ())
-        flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
+      flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
 
     if (username != NULL)
       {
@@ -265,11 +269,11 @@ do_mount (GVfsBackend   *backend,
                                             &ask_user,
                                             NULL,
                                             &ask_password))
-            prompt = g_strdup_printf (_("Enter %s@%s's google documents password"),
-                                      username,
-                                      host);
+          prompt = g_strdup_printf (_("Enter %s@%s's google documents password"),
+                                    username,
+                                    host);
         else
-            show_dialog = FALSE;
+          show_dialog = FALSE;
 
       }
     else
@@ -278,10 +282,7 @@ do_mount (GVfsBackend   *backend,
         flags |= G_ASK_PASSWORD_NEED_USERNAME;
       }
 
-
-
     /* We build the complete adress with which we are going to connect*/
-
     /*Connect to the server*/
     while (TRUE)
       {
@@ -297,7 +298,7 @@ do_mount (GVfsBackend   *backend,
                                                                   NULL,
                                                                   FALSE,
                                                                   &password_save_flags)
-                                   || aborted))
+                                    || aborted))
           {
             if (aborted)
               g_vfs_job_failed (G_VFS_JOB (job),
@@ -332,7 +333,7 @@ do_mount (GVfsBackend   *backend,
 
         g_message ("-> Username: %s\n", full_username);
         g_message ("password: ***\n");
-        
+
         retval = gdata_service_authenticate (GDATA_SERVICE (service),
                                              full_username,
                                              ask_password,
@@ -371,7 +372,7 @@ do_mount (GVfsBackend   *backend,
 
         flags = G_ASK_PASSWORD_NEED_PASSWORD;
         if (g_vfs_keyring_is_available ())
-            flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
+          flags |= G_ASK_PASSWORD_SAVING_SUPPORTED;
 
         prompt = g_strdup_printf (_("Wrong password, enter %s's password again."),
                                   full_username);
@@ -600,6 +601,7 @@ do_set_display_name (GVfsBackend            *backend,
     GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (gdocs_backend);
 
+    g_message ("Set %s display name", filename);
     file = g_vfs_gdocs_file_new_from_gvfs (gdocs_backend,
                                            filename,
                                            cancellable,
@@ -644,12 +646,14 @@ do_set_display_name (GVfsBackend            *backend,
     g_free (new_path);
 }
 
+/* In this function, we actually rebuild the GVfsBackend::entries_list property by hand
+ * because we want to be sure that evrything is up to date on the server. */
 static void
 do_enumerate (GVfsBackend           *backend,
-          GVfsJobEnumerate      *job,
-          const char            *dirname,
-          GFileAttributeMatcher *matcher,
-          GFileQueryInfoFlags   query_flags)
+              GVfsJobEnumerate      *job,
+              const char            *dirname,
+              GFileAttributeMatcher *matcher,
+              GFileQueryInfoFlags    query_flags)
 {
     gchar                   *folder_id ;
     GList                   *list_entries; /*GDataDocumentsEntry*/
@@ -671,9 +675,9 @@ do_enumerate (GVfsBackend           *backend,
         /*Sets the query folder id*/
         gdata_documents_query_set_folder_id (query, folder_id);
         in_folder = TRUE;
-        g_message ("Folder ID: %s\n", folder_id);
       }
 
+    g_print ("Enumerating folder: %s...", folder_id);
     gdata_documents_query_set_show_folders (query, TRUE);
     documents_feed = gdata_documents_service_query_documents (service,
                                                               query,
@@ -746,15 +750,18 @@ do_enumerate (GVfsBackend           *backend,
 
       }
 
+     G_VFS_BACKEND_GDOCS (backend)->priv->is_used = TRUE;
+
     g_object_unref (documents_feed);
     g_free (folder_id);
+    g_print ("Enumaration done\n");
     g_vfs_job_enumerate_done (job);
 }
 
 static void
 do_make_directory (GVfsBackend          *backend,
-               GVfsJobMakeDirectory *job,
-               const char           *filename)
+                   GVfsJobMakeDirectory *job,
+                   const char           *filename)
 {
     gchar                   *title;
     GDataCategory           *folder_category;
@@ -767,6 +774,7 @@ do_make_directory (GVfsBackend          *backend,
     GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (gdocs_backend);
 
+    g_message ("Making dir: %s", filename);
     title = g_path_get_basename (filename);
     if (g_strcmp0 (title, "/") == 0)
       {
@@ -838,6 +846,7 @@ do_make_directory (GVfsBackend          *backend,
     if (new_folder != NULL)
         g_object_unref (new_folder);
 
+    G_VFS_BACKEND_GDOCS (backend)->priv->copying_dir = file;
     g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
@@ -981,8 +990,8 @@ try_close_read (GVfsBackend       *backend,
 
 static void
 write_ready (GObject      *source_object,
-            GAsyncResult *result,
-            gpointer      user_data)
+             GAsyncResult *result,
+             gpointer      user_data)
 {
     GOutputStream   *stream;
     GVfsJob         *job;
@@ -1008,12 +1017,12 @@ write_ready (GObject      *source_object,
 
 static gboolean
 try_write (GVfsBackend       *backend,
-          GVfsJobWrite      *job,
-          GVfsBackendHandle handle,
-          char              *buffer,
-          gsize             buffer_size)
+           GVfsJobWrite      *job,
+           GVfsBackendHandle  handle,
+           char              *buffer,
+           gsize              buffer_size)
 {
-    GCancellable        *cancellable = G_VFS_JOB (job)->cancellable;
+    GCancellable        *cancellable   = G_VFS_JOB (job)->cancellable;
     GOutputStream       *output_stream = G_OUTPUT_STREAM (handle);
 
     g_message ("Trying to write file");
@@ -1030,13 +1039,13 @@ try_write (GVfsBackend       *backend,
 static void
 close_write_ready (GObject      *source_object,
                    GAsyncResult *result,
-                   gpointer      user_data)
+                   gpointer    user_data)
 {
-    gboolean        res;
+    gboolean       res;
 
-    GError          *error = NULL;
-    GVfsJob         *job = G_VFS_JOB (user_data);
-    GOutputStream   *stream = G_OUTPUT_STREAM (source_object);
+    GError        *error  = NULL;
+    GVfsJob       *job    = G_VFS_JOB (user_data);
+    GOutputStream *stream = G_OUTPUT_STREAM (source_object);
 
     res = g_output_stream_close_finish (stream,
                                         result,
@@ -1053,9 +1062,9 @@ close_write_ready (GObject      *source_object,
 }
 
 static gboolean
-try_close_write (GVfsBackend         *backend,
-                 GVfsJobCloseWrite   *job,
-                 GVfsBackendHandle   handle)
+try_close_write (GVfsBackend       *backend,
+                 GVfsJobCloseWrite *job,
+                 GVfsBackendHandle  handle)
 {
     GOutputStream    *stream = G_OUTPUT_STREAM (handle);
 
@@ -1068,9 +1077,9 @@ try_close_write (GVfsBackend         *backend,
 }
 
 static void
-do_delete (GVfsBackend      *backend,
-           GVfsJobDelete    *job,
-           const char       *filename)
+do_delete (GVfsBackend   *backend,
+           GVfsJobDelete *job,
+           const char    *filename)
 {
     GVfsGDocsFile           *file;
     GDataDocumentsEntry     *entry;
@@ -1112,18 +1121,19 @@ do_delete (GVfsBackend      *backend,
 }
 
 static void
-do_query_info (GVfsBackend              *backend,
-               GVfsJobQueryInfo         *job,
-               const char               *filename,
-               GFileQueryInfoFlags      flags,
-               GFileInfo                *info,
-               GFileAttributeMatcher    *matcher)
+do_query_info (GVfsBackend           *backend,
+               GVfsJobQueryInfo      *job,
+               const char            *filename,
+               GFileQueryInfoFlags    flags,
+               GFileInfo             *info,
+               GFileAttributeMatcher *matcher)
 {
     GVfsGDocsFile   *file;
 
     GError          *error = NULL;
     GCancellable    *cancellable = G_VFS_JOB (job)->cancellable;
 
+    g_message("Querring infos");
     file = g_vfs_gdocs_file_new_from_gvfs (G_VFS_BACKEND_GDOCS (backend),
                                            filename,
                                            cancellable,
@@ -1153,8 +1163,8 @@ do_replace (GVfsBackend         *backend,
             GVfsJobOpenForWrite *job,
             const char          *filename,
             const char          *etag,
-            gboolean            make_backup,
-            GFileCreateFlags    flags)
+            gboolean             make_backup,
+            GFileCreateFlags     flags)
 {
     GFile                   *local_file;
     GVfsGDocsFile           *file;
@@ -1205,123 +1215,146 @@ do_replace (GVfsBackend         *backend,
 }
 
 static void
-do_push (GVfsBackend *backend,
-         GVfsJobPush *job,
-         const char *destination,
-         const char *local_path,
-         GFileCopyFlags flags,
-         gboolean remove_source,
-         GFileProgressCallback progress_callback,
-         gpointer progress_callback_data)
+do_push (GVfsBackend           *backend,
+         GVfsJobPush           *job,
+         const char            *destination,
+         const char            *local_path,
+         GFileCopyFlags         flags,
+         gboolean               remove_source,
+         GFileProgressCallback  progress_callback,
+         gpointer               progress_callback_data)
 {
-    gchar                   *destination_filename;
-    const gchar             *entry_id;
-    GDataDocumentsEntry     *entry, *new_entry;
-    GFile                   *local_file;
-    GFileInfo               *local_file_info;
-    GFileType               local_file_type;
-    GVfsGDocsFile           *destination_folder, *file;
+    gchar                 *destination_filename;
+    const gchar           *entry_id;
+    GFile                 *local_file;
+    GFileInfo             *local_file_info;
+    GFileType              local_file_type;
+    GVfsGDocsFile         *destination_folder;
+    GVfsGDocsFile         *file;
+    GDataDocumentsEntry   *entry;
+    GDataDocumentsEntry   *new_entry;
 
-    GError                  *error = NULL;
-    GDataDocumentsFolder    *folder_entry = NULL;
+    GError                *error         = NULL;
+    GDataDocumentsFolder  *folder_entry  = NULL;
 
-    gboolean                overwrite = (flags & G_FILE_COPY_OVERWRITE);
-    GCancellable            *cancellable = G_VFS_JOB (job)->cancellable;
+    gboolean               overwrite     = (flags &G_FILE_COPY_OVERWRITE);
+    GCancellable          *cancellable   = G_VFS_JOB (job)->cancellable;
 
-    GVfsBackendGdocs        *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
-    GDataDocumentsService   *service = g_vfs_backend_gdocs_get_service (gdocs_backend);
+    GVfsBackendGdocs      *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
+    GDataDocumentsService *service       = g_vfs_backend_gdocs_get_service (gdocs_backend);
 
+    gboolean               local_folder_exists  = g_file_test (destination, 
+                                                               G_FILE_TEST_EXISTS);
     /* TODO check how to do for folder 
      * Create dir and make recursion to upload files*/
 
-    g_message ("Destination name:local path %s", local_path);
+    g_message ("local path %s, destination %s", local_path, destination);
     local_file = g_file_new_for_path (local_path);
     local_file_info = g_file_query_info (local_file, "standard::type", G_FILE_QUERY_INFO_NONE, cancellable, &error);
     local_file_type = g_file_info_get_file_type (local_file_info);
 
     /* Is directory case */
-    if (local_file_type == G_FILE_TYPE_DIRECTORY)
-      {
-        if (overwrite)
-          {
-            g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR,
-                              G_IO_ERROR_WOULD_MERGE,
-                              _("Can't copy directory over directory"));
-            return;
-          }
-        else
-          {
-            g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR,
-                        G_IO_ERROR_EXISTS,
-                        _("Target file exists"));
-            return;
-          }
-        g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR,
-                    G_IO_ERROR_WOULD_RECURSE,
-                    _("Can't recursively copy directory"));
-        return;
-      }
-    else
-      {
-        destination_folder = g_vfs_gdocs_file_new_parent_from_gvfs (gdocs_backend,
-                                                                    destination,
-                                                                    cancellable,
-                                                                    &error);
-        if (error != NULL)
-          {
-            g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-            g_error_free (error);
-            return;
-          }
+     if (local_file_type == G_FILE_TYPE_DIRECTORY)
+       {
+         g_print ("Copying directory");
+         if (local_folder_exists)
+           {
+             if (overwrite)
+               {
+                 g_print ("Overwrite directory\n");
+                 g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR,
+                             G_IO_ERROR_WOULD_MERGE,
+                             _("Can't copy directory over directory"));
+                 return;
+               }
+             else 
+               {
+                 g_print ("???ASK?");
+                 g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR,
+                             G_IO_ERROR_EXISTS,
+                             _("Target file exists"));
+                 return;
+                }
+           }
+          g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR,
+                            G_IO_ERROR_WOULD_RECURSE,
+                            _("Can't recursively copy directory"));
+          return;
+       }
+     else
+       {
+         const gchar         *copying_dir_name;
+         gchar               *destination_parent_name;
+         GVfsGDocsFile       *copying_dir;
+         GDataDocumentsEntry *copying_entry;
+
+         copying_dir             = gdocs_backend->priv->copying_dir;
+         copying_entry           = g_vfs_gdocs_file_get_document_entry (copying_dir);
+         copying_dir_name        = gdata_entry_get_title (GDATA_ENTRY (copying_entry));
+         destination_parent_name = g_path_get_parent_basename (destination);
+
+         if (g_strcmp0 (copying_dir_name, destination_parent_name) == 0)
+           destination_folder = copying_dir;
+         else
+           destination_folder = g_vfs_gdocs_file_new_parent_from_gvfs (gdocs_backend,
+                                                                       destination,
+                                                                       cancellable,
+                                                                       &error);
+         if (error != NULL)
+           {
+             g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+             g_error_free (error);
+             return;
+           }
 
 
-        if (g_vfs_gdocs_file_is_root (destination_folder))
-          destination_folder = NULL;
-        else
-          {
-            GDataDocumentsEntry *tmp_entry;
-            tmp_entry = g_vfs_gdocs_file_get_document_entry (destination_folder),
-                      folder_entry = GDATA_DOCUMENTS_FOLDER (tmp_entry);
-          }
+         if (g_vfs_gdocs_file_is_root (destination_folder))
+           destination_folder = NULL;
+         else
+           {
+             GDataDocumentsEntry *tmp_entry;
+             tmp_entry    = g_vfs_gdocs_file_get_document_entry (destination_folder),
+             folder_entry = GDATA_DOCUMENTS_FOLDER (tmp_entry);
+           }
 
-        entry = GDATA_DOCUMENTS_ENTRY (gdata_documents_spreadsheet_new (NULL));
-        destination_filename = g_path_get_basename (destination);
-        gdata_entry_set_title (GDATA_ENTRY (entry), destination_filename);
-        g_free (destination_filename);
-        new_entry = gdata_documents_service_upload_document (service,
-                    NULL,
-                    local_file,
-                    folder_entry,
-                    cancellable,
-                    &error);
-        g_object_unref (entry);
-        g_object_unref (local_file);
+         entry = GDATA_DOCUMENTS_ENTRY (gdata_documents_spreadsheet_new (NULL));
+         destination_filename = g_path_get_basename (destination);
+         gdata_entry_set_title (GDATA_ENTRY (entry), destination_filename);
+         g_free (destination_filename);
+         new_entry = gdata_documents_service_upload_document (service,
+                                                              NULL,
+                                                              local_file,
+                                                              folder_entry,
+                                                              cancellable,
+                                                              &error);
+         g_object_unref (entry);
+         g_object_unref (local_file);
 
-        if (error != NULL)
-          {
-            g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-            g_error_free (error);
-            if (new_entry != NULL)
-              g_object_unref (new_entry);
-            return;
-          }
+         if (error != NULL)
+           {
+             g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+             g_error_free (error);
+             if (new_entry != NULL)
+               g_object_unref (new_entry);
+             return;
+           }
 
-        /* We keep the #GHashTable::entries property up to date */
-        entry_id = gdata_documents_entry_get_document_id (new_entry);
-        file = g_vfs_gdocs_file_new_from_document_entry (gdocs_backend, new_entry, &error);
-        if (error != NULL)
-          {
-            g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-            g_error_free (error);
-            if (new_entry != NULL)
-              g_object_unref (new_entry);
-            return;
-          }
-        g_vfs_backend_gdocs_add_gdocs_file (gdocs_backend, file);
+         /* We keep the #GHashTable::entries property up to date */
+         entry_id = gdata_documents_entry_get_document_id (new_entry);
+         file = g_vfs_gdocs_file_new_from_document_entry (gdocs_backend, new_entry, &error);
+         if (error != NULL)
+           {
+             g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
+             g_error_free (error);
+             if (new_entry != NULL)
+               g_object_unref (new_entry);
+             return;
+           }
+         g_vfs_backend_gdocs_add_gdocs_file (gdocs_backend, file);
 
-        g_object_unref (entry);
-        g_object_unref (new_entry);
-      }
+         g_object_unref (entry);
+         g_object_unref (new_entry);
+       }
 
     g_vfs_job_succeeded (G_VFS_JOB (job));
 }
@@ -1457,6 +1490,8 @@ g_vfs_backend_gdocs_init (GVfsBackendGdocs *backend)
     backend->priv = G_TYPE_INSTANCE_GET_PRIVATE (backend,
                                                  G_VFS_TYPE_BACKEND_GDOCS,
                                                  GVfsBackendGdocsPrivate);
+
+    backend->priv->is_used = FALSE;
 
     backend->priv->service = gdata_documents_service_new (CLIENT_ID);
     backend->priv->entries = g_hash_table_new_full (g_str_hash,

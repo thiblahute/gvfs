@@ -1,0 +1,14 @@
+* Copy folder doesn't work anymore
+* Add the document to the list when "create folder"
+* Show the folder with the new name when renaming -now just hide it
+* Reading reads 2 times; the first time there is data in the buffer, the second ... 0 
+       => What about writing?
+*Manage renaming when copy from gdocs->local containing "/'
+
+/home/thibault/datas/workspace/gnome2/gvfs/daemon/gvfsbackendgdocs.c
+  419  Implement it backup handling*/
+  520 check what is wrong with it*/
+  1169  implement backup handling */
+  1256 check how to do for folder */
+  1366 Figure out how the content_type and title should be found*/
+ 

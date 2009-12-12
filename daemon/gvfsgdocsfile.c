@@ -71,7 +71,7 @@ convert_slashes (gchar *str)
 }
 
 /**
- * g_path_get_parent_basename 
+ * g_path_get_parent_basename
  * @gvfs_path: the name of the file.
  *
  * Gets the last component of the parent' gvfs_path.
@@ -227,7 +227,7 @@ g_vfs_gdocs_file_new_from_gvfs (GVfsBackendGdocs    *backend,
  *
  * If the document_entry is not an handled #GDataDocumentsEntry,
  * a G_IO_ERROR_NOT_SUPPORTED error is set;
- * 
+ *
  * If the @document_entry is %NULL, the newly created #GVfsGDocsFile is the root folder.
  *
  * Returns: a new #GVfsGDocsFile
@@ -258,7 +258,7 @@ g_vfs_gdocs_file_new_from_document_entry (GVfsBackendGdocs      *backend,
     else
       {
         g_set_error (error,
-                     G_IO_ERROR, 
+                     G_IO_ERROR,
                      G_IO_ERROR_NOT_SUPPORTED,
                      "Not a supported document type");
         g_free (gvfs_path);
@@ -305,21 +305,21 @@ g_vfs_gdocs_file_new_parent (GVfsBackendGdocs       *backend,
  * @cancellable: a GCancellable or %NULL
  * @error: GError or %NULL
  *
- * Creates a new #GVfsGDocsFile to represent the parent directory of the 
+ * Creates a new #GVfsGDocsFile to represent the parent directory of the
  * #GVfsGDocsFile represented by @gvfs_path.
  *
  * If it's the root directory, the new #GVfsGDocsFile will also reference the root.
  *
- * Returns: a new #GVfsGDocsFile representing the parent directory of @self, 
+ * Returns: a new #GVfsGDocsFile representing the parent directory of @self,
  * if it's the root directory, GVfsGDocsFile::document-entry  will be %NULL
- * 
+ *
  * If the #GVfsGDocsFile doesn't exit, a G_IO_ERROR_NOT_FOUND is set.
- * 
+ *
  * If there was an error trying to get the feed, the server error is set.
- * 
+ *
  * If the newly created GVfsGDocsFile is not a folder a G_IO_ERROR_NOT_DIRECTORY
  * error is set.
- * 
+ *
  * Returns: the parent of the file referenced byt gvfs_path
  */
 GVfsGDocsFile *
@@ -372,7 +372,7 @@ g_vfs_gdocs_file_is_root (const GVfsGDocsFile *self)
   g_return_val_if_fail (G_VFS_IS_GDOCS_FILE (self), FALSE);
 
   return self->priv->gvfs_path[0] == '/' && self->priv->gvfs_path[1] == 0
-         && self->priv->document_entry == NULL; /* TODO check that  the entry 
+         && self->priv->document_entry == NULL; /* TODO check that  the entry
                                                  * check works fine */
 }
 
@@ -440,7 +440,7 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *self,
     if (GDATA_IS_DOCUMENTS_ENTRY (document_entry))
       {
         GTimeVal t;
-        
+
         filename = gdata_documents_entry_get_document_id (document_entry);
         g_file_info_set_name (info, filename);
         gdata_entry_get_updated (GDATA_ENTRY (document_entry), &t);
@@ -477,7 +477,7 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *self,
         else
           {
             g_set_error (error,
-                        G_IO_ERROR, 
+                        G_IO_ERROR,
                         G_IO_ERROR_NOT_SUPPORTED,
                         "Not a supported document type");
             g_object_unref (info);
@@ -507,7 +507,7 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *self,
       }
     g_free (content_type);
 
-    /* If the file is the root dir, we don't 
+    /* If the file is the root dir, we don't
      * have to set the etag and the display name
      **/
     if (g_vfs_gdocs_file_is_root (self))
@@ -554,7 +554,7 @@ g_vfs_gdocs_file_get_info (GVfsGDocsFile            *self,
         else if (GDATA_IS_DOCUMENTS_PRESENTATION (document_entry))
           {
             if (!g_str_has_suffix (display_name, ".ppt"))
-              {  
+              {
                 display_name = g_strconcat (tmp_str, ".ppt", NULL);
                 g_free (tmp_str);
               }
@@ -874,7 +874,7 @@ g_vfs_gdocs_file_class_init (GVfsGDocsFileClass *klass)
                                                           this #GVfsGDocsFile",
                                                           G_VFS_TYPE_BACKEND,
                                                           G_PARAM_CONSTRUCT_ONLY |
-                                                          G_PARAM_READWRITE | 
+                                                          G_PARAM_READWRITE |
                                                           G_PARAM_STATIC_STRINGS));
     /*
      * GVfsGDocsFile:document-entry
@@ -887,7 +887,7 @@ g_vfs_gdocs_file_class_init (GVfsGDocsFileClass *klass)
                                                           "The #GDataDocumentsEntry\
                                                           corresponding",
                                                           GDATA_TYPE_DOCUMENTS_ENTRY,
-                                                          G_PARAM_CONSTRUCT_ONLY | 
+                                                          G_PARAM_CONSTRUCT_ONLY |
                                                           G_PARAM_READWRITE |
                                                           G_PARAM_STATIC_STRINGS));
     /**
@@ -897,13 +897,13 @@ g_vfs_gdocs_file_class_init (GVfsGDocsFileClass *klass)
      **/
     g_object_class_install_property (gobject_class, PROP_GVFS_PATH,
                                      g_param_spec_string ("gvfs-path",
-                                                          "Gvfs path", 
+                                                          "Gvfs path",
                                                           "A simple string \
                                                           corresponding to \
                                                           the gvfs path of the class.",
                                                           "/",
                                                           G_PARAM_CONSTRUCT_ONLY |
-                                                          G_PARAM_READWRITE | 
+                                                          G_PARAM_READWRITE |
                                                           G_PARAM_STATIC_STRINGS));
 
 }

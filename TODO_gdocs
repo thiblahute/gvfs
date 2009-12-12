@@ -1,3 +1,7 @@
+==== Todo now
+debug g_vfs_backend_gdocs_look_up_file_from_name 
+
+====
 * Copy folder doesn't work anymore
 * Add the document to the list when "create folder"
 * Show the folder with the new name when renaming -now just hide it

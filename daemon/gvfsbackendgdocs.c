@@ -58,6 +58,9 @@ void g_vfs_backend_gdocs_remove_gdocs_file  (GVfsBackendGdocs   *backend,
                                              GVfsGDocsFile      *file);
 void g_vfs_backend_gdocs_add_gdocs_file     (GVfsBackendGdocs   *backend,
                                              GVfsGDocsFile      *file);
+GVfsGDocsFile * g_vfs_backend_gdocs_look_up_file_from_name (GVfsBackendGdocs *backend,
+                                                            const gchar      *entry_name,
+                                                            const gchar      *folder);
 
 
 /*Gdata client ID, we should ask for a new one for GVFS*/
@@ -70,9 +73,9 @@ G_DEFINE_TYPE (GVfsBackendGdocs, g_vfs_backend_gdocs, G_VFS_TYPE_BACKEND)
 /*Private structure*/
 struct _GVfsBackendGdocsPrivate {
     GDataDocumentsService *service;
-    GHashTable            *entries;
-    gboolean               is_used;       /* Some file operation has been done */
-    GVfsGDocsFile         *copying_dir;   /* Handles copying to folder in push */
+    GHashTable            *entries;     /* link entry::ID => GVfsGDocsFile   */
+    gboolean               is_used;     /* Some file operation has been done */
+    GVfsGDocsFile         *copying_dir; /* Handles copying to folder in push */
 };
 
 /* ********************************************************************************** */
@@ -85,13 +88,13 @@ g_vfs_backend_gdocs_add_gdocs_file (GVfsBackendGdocs *backend,
     GDataDocumentsEntry *entry;
 
     GHashTable *entries = backend->priv->entries;
-    
+
     g_return_if_fail (G_VFS_IS_GDOCS_FILE (file));
 
     if (g_vfs_gdocs_file_is_root (file))
         entry_id = "/";
     else
-      { 
+      {
         entry = g_vfs_gdocs_file_get_document_entry (file);
         entry_id =  gdata_documents_entry_get_document_id (entry);
       }
@@ -107,6 +110,7 @@ g_vfs_backend_gdocs_remove_gdocs_file  (GVfsBackendGdocs   *backend,
     GDataDocumentsEntry *entry;
     GHashTable          *entries;
 
+    g_return_if_fail (G_VFS_IS_BACKEND_GDOCS (backend));
     g_return_if_fail (G_VFS_IS_GDOCS_FILE (file));
 
     entries = backend->priv->entries;
@@ -114,13 +118,68 @@ g_vfs_backend_gdocs_remove_gdocs_file  (GVfsBackendGdocs   *backend,
     if (g_vfs_gdocs_file_is_root (file))
       entry_id = "/";
     else
-      { 
+      {
         entry = g_vfs_gdocs_file_get_document_entry (file);
         entry_id =  gdata_documents_entry_get_document_id (entry);
       }
 
     g_hash_table_remove (entries, entry_id);
 }
+
+/*  Check if there is any entry which has an defined name (passed as parameter)
+ *  in a particular folder also passed as parameter
+ *
+ *  @entry_name: the name of the entry we passe as parameter
+ *  @folder: the #GVfsGDocsFile representing the  folder where to look for
+ *  an entry which as entry_name as GDataEntry::title attribute
+ *
+ *  @Return: the #GVfsGDocsFile which correspond to what we are looking for
+ *           or #NULL
+ **/
+GVfsGDocsFile *
+g_vfs_backend_gdocs_look_up_file_from_name (GVfsBackendGdocs *backend,
+                                             const gchar      *entry_name,
+                                             const gchar      *folder_id)
+{
+    GHashTableIter iter;
+    gpointer current_entry_id, current_file;
+    GVfsGDocsFile *rv = NULL;
+
+    GHashTable *entries = backend->priv->entries;
+
+    g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS(backend), NULL);
+    g_return_val_if_fail (entry_name != NULL , NULL);
+    g_return_val_if_fail (folder_id != NULL, NULL);
+
+    g_hash_table_iter_init (&iter, entries);
+    while (g_hash_table_iter_next (&iter, &current_entry_id, &current_file))
+      {
+        GVfsGDocsFile *file  = G_VFS_GDOCS_FILE (current_file);
+        GDataEntry    *entry = GDATA_ENTRY (g_vfs_gdocs_file_get_document_entry (file));
+        const gchar   *current_entry_name = gdata_entry_get_title (entry);
+
+        g_message ("entry name %s, current_entry_name %s", entry_name, current_entry_name);
+        if (g_strcmp0 (entry_name, current_entry_name) == 0)
+          {
+            gchar *entry_path, *parent_id;
+
+            entry_path = gdata_documents_entry_get_path (GDATA_DOCUMENTS_ENTRY (entry));
+            parent_id = g_path_get_parent_basename(entry_path);
+
+            g_message ("parent_id %s, folder_id %s", entry_name, current_entry_name);
+            if (g_strcmp0 (parent_id, folder_id) == 0)
+              {
+                  rv = (GVfsGDocsFile*)current_file;
+                  break;
+              }
+            g_free (parent_id);
+            g_free(entry_path);
+          }
+      }
+    return rv;
+
+}
+
 /* ********************************************************************************** */
 /* public utility functions */
 
@@ -128,7 +187,7 @@ GVfsGDocsFile *
 g_vfs_backend_gdocs_look_up_file (const GVfsBackendGdocs *backend,
                                   const gchar            *entry_id)
 {
-    GHashTable *entries = backend->priv->entries; 
+    GHashTable *entries = backend->priv->entries;
 
     g_return_val_if_fail (G_VFS_IS_BACKEND_GDOCS (backend), NULL);
     g_return_val_if_fail (entry_id != NULL, NULL);
@@ -183,7 +242,7 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
       }
 
     for (list_entries = gdata_feed_get_entries (GDATA_FEED (documents_feed));
-         list_entries != NULL; 
+         list_entries != NULL;
          list_entries = list_entries->next)
       {
         GDataDocumentsEntry *document_entry;
@@ -193,7 +252,7 @@ g_vfs_backend_gdocs_rebuild_entries (GVfsBackendGdocs   *backend,
         file = g_vfs_gdocs_file_new_from_document_entry (backend,
                                                          document_entry,
                                                          NULL);
-        g_vfs_backend_gdocs_add_gdocs_file (backend, file); 
+        g_vfs_backend_gdocs_add_gdocs_file (backend, file);
       }
     g_object_unref (documents_feed);
 
@@ -317,7 +376,7 @@ do_mount (GVfsBackend   *backend,
             return;
           }
 
-        /* If it's the first loop, we create the full username 
+        /* If it's the first loop, we create the full username
          * (which is the user email adresse
          **/
         if (full_username == NULL)
@@ -341,7 +400,7 @@ do_mount (GVfsBackend   *backend,
                                              &error);
         if (retval == TRUE)
           {
-            /* Save the password, we use "gdata" as protocol  name since we could 
+            /* Save the password, we use "gdata" as protocol  name since we could
              * use the same protocol later for other google services (as picassaweb)
              * which would have the same password
              **/
@@ -541,7 +600,7 @@ do_move (GVfsBackend            *backend,
         entry = g_vfs_gdocs_file_get_document_entry (source_file);
         tmp_entry = g_vfs_gdocs_file_get_document_entry (containing_folder);
         folder_entry = GDATA_DOCUMENTS_FOLDER (tmp_entry);
-                    
+
         g_message ("Moving %s out of %s",
                     gdata_documents_entry_get_document_id (entry),
                     gdata_documents_entry_get_document_id (tmp_entry));
@@ -814,7 +873,7 @@ do_make_directory (GVfsBackend          *backend,
     tmp_folder_entry = GDATA_DOCUMENTS_FOLDER (entry);
     tmp_entry = GDATA_DOCUMENTS_ENTRY (folder);
     new_folder = gdata_documents_service_upload_document (service,
-                                                          tmp_entry,                                                
+                                                          tmp_entry,
                                                           NULL,
                                                           tmp_folder_entry,
                                                           cancellable,
@@ -905,7 +964,7 @@ read_ready (GObject      *source_object,
     GError       *error;
     gssize        nread;
 
-    stream = G_INPUT_STREAM (source_object); 
+    stream = G_INPUT_STREAM (source_object);
     error  = NULL;
     job    = G_VFS_JOB (user_data);
 
@@ -971,7 +1030,7 @@ close_read_ready (GObject      *source_object,
     g_object_unref (stream);
 }
 
-static gboolean 
+static gboolean
 try_close_read (GVfsBackend       *backend,
                 GVfsJobCloseRead  *job,
                 GVfsBackendHandle  handle)
@@ -998,7 +1057,7 @@ write_ready (GObject      *source_object,
     GError          *error;
     gssize          nwrite;
 
-    stream = G_OUTPUT_STREAM (source_object); 
+    stream = G_OUTPUT_STREAM (source_object);
     error  = NULL;
     job    = G_VFS_JOB (user_data);
 
@@ -1101,9 +1160,9 @@ do_delete (GVfsBackend   *backend,
       }
 
     entry = g_vfs_gdocs_file_get_document_entry (file);
-    gdata_service_delete_entry (GDATA_SERVICE (service), 
-                                GDATA_ENTRY (entry), 
-                                cancellable, 
+    gdata_service_delete_entry (GDATA_SERVICE (service),
+                                GDATA_ENTRY (entry),
+                                cancellable,
                                 &error);
     if (error != NULL)
       {
@@ -1243,31 +1302,40 @@ do_push (GVfsBackend           *backend,
     GVfsBackendGdocs      *gdocs_backend = G_VFS_BACKEND_GDOCS (backend);
     GDataDocumentsService *service       = g_vfs_backend_gdocs_get_service (gdocs_backend);
 
-    gboolean               local_folder_exists  = g_file_test (destination, 
-                                                               G_FILE_TEST_EXISTS);
-    /* TODO check how to do for folder 
+    /* TODO check how to do for folder
      * Create dir and make recursion to upload files*/
 
     g_message ("local path %s, destination %s", local_path, destination);
     local_file = g_file_new_for_path (local_path);
-    local_file_info = g_file_query_info (local_file, "standard::type", G_FILE_QUERY_INFO_NONE, cancellable, &error);
+    local_file_info = g_file_query_info (local_file,
+                                         "standard::type",
+                                         G_FILE_QUERY_INFO_NONE,
+                                         cancellable,
+                                         &error);
     local_file_type = g_file_info_get_file_type (local_file_info);
 
     /* Is directory case */
      if (local_file_type == G_FILE_TYPE_DIRECTORY)
        {
-         g_print ("Copying directory");
-         if (local_folder_exists)
+         gchar *folder_basemane = g_path_get_basename (local_path);
+         GVfsGDocsFile *distant_folder;
+         distant_folder = g_vfs_backend_gdocs_look_up_file_from_name (gdocs_backend,
+                                                                      folder_basemane,
+                                                                      folder_basemane);
+
+         g_print ("COPYING DIRECTORY... ");
+         if (distant_folder != NULL)
            {
              if (overwrite)
                {
                  g_print ("Overwrite directory\n");
+                 gdocs_backend->priv->copying_dir = distant_folder;
                  g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR,
                              G_IO_ERROR_WOULD_MERGE,
                              _("Can't copy directory over directory"));
                  return;
                }
-             else 
+             else
                {
                  g_print ("???ASK?");
                  g_vfs_job_failed (G_VFS_JOB (job), G_IO_ERROR,

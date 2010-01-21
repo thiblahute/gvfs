@@ -15,6 +15,7 @@ AC_PROG_MAKE_SET
 AM_DISABLE_STATIC
 AM_PROG_LIBTOOL
 AC_PATH_PROG(PKG_CONFIG, pkg-config, no)
+AC_PATH_PROG(GIO_QUERYMODULES, gio-querymodules, no)
 AM_PROG_CC_C_O
 AC_PROG_SED
 
@@ -279,7 +280,7 @@ HAL_LIBS=
 HAL_CFLAGS=
 HAL_REQUIRED=0.5.10
 
-if test "x$enable_hal" != "xno"; then
+if test "x$enable_hal" != "xno" && test "x$msg_gdu" = "xno"; then
   PKG_CHECK_EXISTS([hal >= $HAL_REQUIRED], msg_hal=yes)
 
   if test "x$msg_hal" = "xyes"; then
@@ -313,6 +314,16 @@ if test "x$enable_gudev" != "xno"; then
   fi
 fi
 AM_CONDITIONAL(USE_GUDEV, [test "$msg_gudev" = "yes"])
+
+if test "x$msg_gudev" = "xyes"; then
+  msg_hotplug_backend="gudev"
+else 
+  if test "x$msg_hal" = "xyes"; then
+    msg_hotplug_backend="hal"
+  else
+    msg_hotplug_backend="none"
+  fi
+fi
 
 dnl **************************************************
 dnl *** Check if we should build with CDDA backend ***
@@ -723,6 +734,8 @@ echo
 echo "gvfs configuration summary:"
 echo "
         gio module directory : $giomodulesdir
+
+        hotplug backend:              $msg_hotplug_backend
 
         FTP/HTTP/WebDAV support       $msg_http
         ObexFTP support               $msg_obexftp
